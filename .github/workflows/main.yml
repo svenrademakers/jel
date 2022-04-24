@@ -11,9 +11,6 @@ env:
 jobs:
   debian-build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: http_server
     env:
       API_KEY: ${{ secrets.API_KEY }}
       USERNAME: ${{ secrets.USERNAME }}
@@ -24,9 +21,9 @@ jobs:
       - name: checkout git repo
         uses: actions/checkout@v2
       - name: build aarch64 target
-        run: cargo build --release --target aarch64-unknown-linux-gnu
+        run: cargo build --manifest-path http_server/Cargo.toml --release --target aarch64-unknown-linux-gnu
       - name: packaging .deb archive
-        run: cargo deb --no-build
+        run: cargo deb --no-build --manifest-path http_server/Cargo.toml
       - name: Archive deb package
         uses: actions/upload-artifact@v2
         with:
