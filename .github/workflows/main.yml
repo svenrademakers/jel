@@ -1,4 +1,4 @@
-name: Http Server workflow
+name: Ronaldo's CI
 on:
   push:
     branches: [ master ]
@@ -27,5 +27,5 @@ jobs:
       - name: upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: flaunch deb package
+          name: ronaldos http server
           path: http_server/target/aarch64-unknown-linux-gnu/debian/*.deb
