@@ -1,0 +1,20 @@
+[package]
+name = "svenrademakers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version="*", features = ["derive"] }
+tokio = { version = "*", features = ["net", "fs", "rt", "rt-multi-thread", "macros", "io-util", "sync"] }
+bytes = "*"
+async-trait = "*"
+http = "*"
+chrono = "*"
+log = "*"
+hyper = {version = "*", features = ["full"]}
+tokio-rustls = "*"
+rustls-pemfile = "*"
+futures-util = "*"
+serde_json= "*"
+serde = "*"
+#futures = {version = "*", features = ["thread-pool"]}

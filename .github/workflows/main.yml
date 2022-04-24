@@ -1,0 +1,19 @@
+name: Jelena website CI
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  upload_to_ftp_server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - id: files
+        uses: jitterbit/get-changed-files@v1
+        with:
+          format: 'csv'
+
+      - run: python .github/upload_to_ftp.py svenrademakers.com admin ${{ secrets.FTP_PASS }} ${{ steps.files.outputs.added_modified  }}, ${{ steps.files.outputs.removed }} 
+        name: Upload changed files to FTP server.
