@@ -26,9 +26,9 @@ struct Args {
     host: String,
     #[clap(long, default_value = "127.0.0.1")]
     hostname: String,
-    #[clap(long, default_value = "examples/sample.rsa")]
+    #[clap(long, default_value = "../test_certificates/server.key")]
     private_key: PathBuf,
-    #[clap(long, default_value = "examples/sample.pem")]
+    #[clap(long, default_value = "../test_certificates/server.crt")]
     certificates: PathBuf,
 }
 
@@ -100,7 +100,7 @@ fn load_private_key(filename: &std::path::Path) -> io::Result<rustls::PrivateKey
     let mut reader = io::BufReader::new(keyfile);
 
     let keys = rustls_pemfile::rsa_private_keys(&mut reader)
-        .map_err(|_| error("failed to load private key".into()))?;
+        .map_err(|e| error(format!("failed to load private key {}", e)))?;
     if keys.len() != 1 {
         return Err(error("expected a single private key".into()));
     }
