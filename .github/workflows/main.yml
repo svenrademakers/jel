@@ -11,6 +11,9 @@ env:
 jobs:
   debian-build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app
     env:
       API_KEY: ${{ secrets.API_KEY }}
       USERNAME: ${{ secrets.USERNAME }}
@@ -21,7 +24,7 @@ jobs:
       - name: checkout git repo
         uses: actions/checkout@v2
       - name: build aarch64 target
-        run: cd http_server && cargo build --release --target aarch64-unknown-linux-gnu
+        run: cargo build --release --target aarch64-unknown-linux-gnu
       - name: packaging .deb archive
         run: cargo deb --no-build
       - name: Archive deb package
