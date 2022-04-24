@@ -1,5 +1,5 @@
 [package]
-name = "svenrademakers"
+name = "ronaldos-http-server"
 version = "0.1.0"
 edition = "2021"
 authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
