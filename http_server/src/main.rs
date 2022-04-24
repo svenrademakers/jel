@@ -21,7 +21,7 @@ use tokio_rustls::rustls;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(short, long, value_name = "PATH", default_value = "../../www")]
+    #[clap(short, long, value_name = "PATH", default_value = "/opt/share/www")]
     www_dir: PathBuf,
     #[clap(short, long, default_value_t = 80)]
     port: u16,
@@ -40,8 +40,8 @@ async fn main() -> io::Result<()> {
     init_log(log::LevelFilter::Debug);
     let args = Args::parse();
     let tls_cfg = load_server_config(&args)?;
+    let service_context = HttpServer::new(args.www_dir, &args.hostname).await?;
 
-    let service_context = HttpServer::new(args.www_dir).await?;
     let make_service = make_service_fn(|_| {
         let context = service_context.clone();
         async {

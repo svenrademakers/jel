@@ -10,10 +10,12 @@ use crate::services::{FileService, MatchService, RequestHandler, SessionMananger
 pub struct HttpServer {
     services: HashMap<&'static str, Arc<dyn RequestHandler>>,
     session_manager: Arc<SessionMananger>,
+    host: String,
 }
 
 impl HttpServer {
-    pub async fn new(www_dir: std::path::PathBuf) -> io::Result<Self> {
+    pub async fn new(www_dir: std::path::PathBuf, host: &str) -> io::Result<Self> {
+        let host = format!("https://{}", host);
         let mut services: HashMap<&'static str, Arc<dyn RequestHandler>> = HashMap::new();
 
         services.insert("/", Arc::new(FileService::new(www_dir).await?));
@@ -26,22 +28,30 @@ impl HttpServer {
         Ok(HttpServer {
             services,
             session_manager,
+            host,
         })
     }
 
     pub async fn handle_request(
         &self,
-        request: http::Request<Body>,
+        mut request: http::Request<Body>,
     ) -> Result<http::Response<Body>, io::Error> {
+        // remove host from the request
+        let uri =
+            http::uri::Uri::try_from(request.uri().path().trim_start_matches(&self.host)).unwrap();
+        *request.uri_mut() = uri;
+
         if let Some(denied_response) = self.session_manager.has_permission(&request).await {
             return Ok(denied_response);
         }
+
         let handler = self
             .services
             .get(request.uri().path())
             .or_else(|| self.services.get("/"))
             .expect("there should should always be a default http handler defined");
 
-        handler.invoke(request).await
+        let response = handler.invoke(request).await;
+        response
     }
 }
