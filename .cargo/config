@@ -1,2 +1,2 @@
-[target.aarch64-linux-androideabi]
-linker = "arm-linux-androideabi-gcc"
+[target.gcc-aarch64-linux-gnu]
+linker = "gcc-aarch64-linux-gnu"
