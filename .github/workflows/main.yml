@@ -16,15 +16,15 @@ jobs:
       USERNAME: ${{ secrets.USERNAME }}
       PASSWORD: ${{ secrets.PASSWORD }}
     steps:
-      - name: install aarch64 target for cargo
+      - name: install aarch64 toolchain
         run: sudo apt-get install gcc-aarch64-linux-gnu && rustup target add aarch64-unknown-linux-gnu && cargo install cargo-deb
       - name: checkout git repo
         uses: actions/checkout@v2
-      - name: build aarch64 target
+      - name: build http-server aarch64
         run: cargo build --manifest-path http_server/Cargo.toml --release --target aarch64-unknown-linux-gnu
-      - name: packaging .deb archive
-        run: cargo deb --no-build --manifest-path http_server/Cargo.toml
-      - name: Archive deb package
+      - name: archiving .deb package
+        run: cargo deb --no-build --manifest-path http_server/Cargo.toml --target aarch64-unknown-linux-gnu
+      - name: upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: flaunch deb package
