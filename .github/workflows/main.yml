@@ -17,7 +17,7 @@ jobs:
       PASSWORD: ${{ secrets.PASSWORD }}
     steps:
       - name: install aarch64 target for cargo
-        run: rustup target add aarch64-unknown-linux-gnu && cargo install cargo-deb
+        run: sudo apt-get install gcc-aarch64-linux-gnu && rustup target add aarch64-unknown-linux-gnu && cargo install cargo-deb
       - name: checkout git repo
         uses: actions/checkout@v2
       - name: build aarch64 target
