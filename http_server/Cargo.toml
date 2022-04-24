@@ -2,7 +2,7 @@
 name = "svenrademakers"
 version = "0.1.0"
 edition = "2021"
-authors = "Sven Rademakers <sven.rademakers@gmail.com>"
+authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
 
 [dependencies]
 clap = { version="*", features = ["derive"] }
