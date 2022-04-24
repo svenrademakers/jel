@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./http-server
+        working-directory: http-server
     env:
       API_KEY: ${{ secrets.API_KEY }}
       USERNAME: ${{ secrets.USERNAME }}
