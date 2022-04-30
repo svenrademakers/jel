@@ -1,18 +1,20 @@
-use async_trait::async_trait;
-use hyper::Body;
-use std::{collections::HashSet, sync::Arc};
-use tokio::sync::RwLock;
 use super::RequestHandler;
+use async_trait::async_trait;
+use chrono::Duration;
+use hyper::Body;
+use once_cell::sync::Lazy;
+use std::{collections::HashSet, ops::Add};
+use tokio::sync::RwLock;
 const SESSION_ID_KEY: &str = "Session_id";
 
-#[derive(Debug, Clone)]
-pub struct SessionMananger {
-    session_ids: Arc<RwLock<HashSet<u64>>>,
-}
+static SESSIONS: Lazy<RwLock<HashSet<u64>>> = Lazy::new(|| RwLock::new(HashSet::new()));
+
+#[derive(Debug, Clone, Copy)]
+pub struct SessionMananger;
 
 impl SessionMananger {
-    pub fn new(session_ids: Arc<RwLock<HashSet<u64>>>) -> Self {
-        SessionMananger { session_ids }
+    pub const fn new() -> Self {
+        SessionMananger {}
     }
 
     /// validate that the request is allowed to take place.
@@ -22,7 +24,7 @@ impl SessionMananger {
             if let Some((key, value)) = cookie.split_once("=") {
                 if key.eq(SESSION_ID_KEY) {
                     let session_id = value.parse::<u64>().unwrap();
-                    return self.session_ids.read().await.get(&session_id).cloned();
+                    return SESSIONS.read().await.get(&session_id).cloned();
                 }
             }
         }
@@ -56,8 +58,9 @@ impl SessionMananger {
         }
     }
 
-    fn login(&self, data: &[u8]) -> bool {
+    fn create_session(&self, data: &[u8]) -> Option<u64> {
         let utf8_body = std::str::from_utf8(data).unwrap();
+        println!("DATA: {}", utf8_body);
         let mut username_ok = false;
         let mut password_ok = false;
         for var in utf8_body.split("&") {
@@ -71,7 +74,10 @@ impl SessionMananger {
             }
         }
 
-        username_ok && password_ok
+        match username_ok && password_ok {
+            true => Some(12345),
+            false => None,
+        }
     }
 }
 
@@ -91,16 +97,23 @@ impl RequestHandler for SessionMananger {
                 .unwrap()),
             _ => {
                 let body = hyper::body::to_bytes(request).await.unwrap();
-                if self.login(&body) {
+                if let Some(session) = self.create_session(&body) {
+                    let expiration = chrono::Local::now().add(Duration::days(1));
+
                     Ok(http::Response::builder()
-                        .header(http::header::SET_COOKIE, format!("SESSION_ID_KEY=12345;"))
-                        .status(http::StatusCode::OK)
+                        .header(
+                            http::header::SET_COOKIE,
+                            format!("{}={}; Secure; HttpOnly", SESSION_ID_KEY, session),
+                        )
+                        .header(http::header::LOCATION, "/index.html")
+                        .header(http::header::EXPIRES, expiration.to_rfc2822())
+                        .status(http::StatusCode::SEE_OTHER)
                         .body(Body::empty())
                         .unwrap())
                 } else {
                     Ok(http::Response::builder()
                         .status(http::StatusCode::FORBIDDEN)
-                        .body(Body::empty())
+                        .body(Body::from("password or username not correct!"))
                         .unwrap())
                 }
             }
