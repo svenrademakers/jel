@@ -28,4 +28,6 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: ronaldos http server
-          path: http_server/target/aarch64-unknown-linux-gnu/debian/*.deb
+          path: |
+            http_server/target/aarch64-unknown-linux-gnu/debian/*.deb
+            http_server/www
