@@ -1,4 +1,5 @@
 mod http_server;
+mod logger;
 mod redirect_server;
 mod services;
 mod tls_stream;
@@ -9,6 +10,8 @@ use http_server::HttpServer;
 use hyper::server::conn::AddrIncoming;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
+use log::*;
+use logger::init_log;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,6 +37,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    init_log(log::LevelFilter::Debug);
     let args = Args::parse();
     let tls_cfg = load_server_config(&args)?;
 
@@ -49,9 +53,12 @@ async fn main() -> io::Result<()> {
         }
     });
 
-    let addr = format!("{}:{}", args.host, args.port).parse().unwrap();
+    let addr = format!("{}:{}", args.host, 443).parse().unwrap();
     let incoming = AddrIncoming::bind(&addr).unwrap();
+    info!("listening on interface {}", addr);
+
     let server = Server::builder(TlsAcceptor::new(tls_cfg, incoming)).serve(make_service);
+    info!("running server..");
     server.await.unwrap();
 
     Ok(())

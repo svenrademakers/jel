@@ -18,4 +18,5 @@ rustls-pemfile = "*"
 futures-util = "*"
 serde_json= "*"
 serde = "*"
+syslog = "*"
 #futures = {version = "*", features = ["thread-pool"]}
