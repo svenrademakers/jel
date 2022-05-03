@@ -1,8 +1,7 @@
+use crate::services::{FileService, MatchService, RequestHandler, SessionMananger};
 use hyper::Body;
 use std::io;
 use std::{collections::HashMap, sync::Arc};
-
-use crate::services::{FileService, MatchService, RequestHandler, SessionMananger};
 
 #[derive(Clone)]
 pub struct HttpServer {
@@ -32,7 +31,6 @@ impl HttpServer {
         mut request: http::Request<Body>,
     ) -> Result<http::Response<Body>, io::Error> {
         self.remove_hostname_from_uri(&mut request);
-
         if let Some(denied_response) = self.session_manager.has_permission(&request).await {
             return Ok(denied_response);
         }

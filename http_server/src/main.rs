@@ -2,21 +2,21 @@ mod http_server;
 mod logger;
 mod redirect_server;
 mod services;
+mod tls_config;
 mod tls_stream;
 
+use crate::tls_config::load_server_config;
 use crate::tls_stream::TlsAcceptor;
 use clap::Parser;
 use http_server::HttpServer;
 use hyper::server::conn::AddrIncoming;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::Server;
+use hyper::{Body, Server};
 use log::*;
 use logger::init_log;
 use std::fmt::Debug;
+use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::{fs, io};
-use tokio_rustls::rustls;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -37,11 +37,14 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    init_log(log::LevelFilter::Debug);
+    init_log(log::LevelFilter::Info);
     let args = Args::parse();
-    let tls_cfg = load_server_config(&args)?;
+
+    // load service context data
+    let tls_cfg = load_server_config(&args.certificates, &args.private_key)?;
     let service_context = HttpServer::new(args.www_dir, &args.hostname).await?;
 
+    // define how a service is made. when a client connects it will get its own context to talk with
     let make_service = make_service_fn(|_| {
         let context = service_context.clone();
         async {
@@ -58,59 +61,36 @@ async fn main() -> io::Result<()> {
     info!("listening on interface {}", addr);
 
     let server = Server::builder(TlsAcceptor::new(tls_cfg, incoming)).serve(make_service);
-    info!("running server..");
-    server.await.unwrap();
+    let redirect_server = redirect_server(&args.hostname, &args.host, args.port);
 
+    let result = tokio::select! {
+        res = server => res,
+        res = redirect_server => res,
+    };
+
+    if let Err(e) = result {
+        error!("fatal error. exiting server : {}", e);
+    }
     Ok(())
 }
 
-fn load_server_config(args: &Args) -> Result<Arc<rustls::ServerConfig>, io::Error> {
-    let certs = load_certs(&args.certificates)?;
-    let key = load_private_key(&args.private_key)?;
-    let mut cfg = rustls::ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)
-        .map_err(|e| error(format!("{}", e)))?;
-    cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    Ok(Arc::new(cfg))
-}
+async fn redirect_server(hostname: &str, host: &str, port: u16) -> Result<(), hyper::Error> {
+    let make_svc = make_service_fn(|_conn| {
+        let redirect_location = format!("https://{}", hostname);
+        let service = service_fn(move |_| {
+            let location = redirect_location.clone();
+            async {
+                http::Response::builder()
+                    .status(http::StatusCode::MOVED_PERMANENTLY)
+                    .header("Location", location)
+                    .body(Body::empty())
+            }
+        });
+        async { Ok::<_, std::io::Error>(service) }
+    });
 
-fn error(err: String) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err)
-}
-
-fn load_certs(filename: &std::path::Path) -> io::Result<Vec<rustls::Certificate>> {
-    let certfile = fs::File::open(filename).map_err(|e| {
-        error(format!(
-            "failed to open {}: {}",
-            filename.to_string_lossy(),
-            e
-        ))
-    })?;
-    let mut reader = io::BufReader::new(certfile);
-
-    // Load and return certificate.
-    let certs = rustls_pemfile::certs(&mut reader)
-        .map_err(|_| error("failed to load certificate".into()))?;
-    Ok(certs.into_iter().map(rustls::Certificate).collect())
-}
-
-fn load_private_key(filename: &std::path::Path) -> io::Result<rustls::PrivateKey> {
-    let keyfile = fs::File::open(filename).map_err(|e| {
-        error(format!(
-            "failed to open {}: {}",
-            filename.to_string_lossy(),
-            e
-        ))
-    })?;
-    let mut reader = io::BufReader::new(keyfile);
-
-    let keys = rustls_pemfile::rsa_private_keys(&mut reader)
-        .map_err(|e| error(format!("failed to load private key {}", e)))?;
-    if keys.len() != 1 {
-        return Err(error("expected a single private key".into()));
-    }
-
-    Ok(rustls::PrivateKey(keys[0].clone()))
+    let addr = format!("{}:{}", host, port).parse().unwrap();
+    let server = Server::bind(&addr).serve(make_svc);
+    info!("listening on interface {}", addr);
+    server.await
 }
