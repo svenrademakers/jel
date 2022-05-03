@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 use hyper::Body;
+use std::ffi::OsStr;
+use std::fmt::Display;
 use std::io;
 use std::path::PathBuf;
 
@@ -44,9 +46,21 @@ impl FileService {
             bytes.extend(content);
         }
 
+        let content_type = match path.extension().and_then(OsStr::to_str) {
+            Some("jpeg") => "image/jpeg",
+            Some("png") => "image/png",
+            Some("svg") => "image/svg+xml",
+            Some("json") => "application/json",
+            Some("js") => "text/javascript",
+            Some("css") => "text/css",
+            Some("html" | "htm") => "text/html; charset=UTF-8",
+            _ => "application/octet-stream",
+        };
+
         let response = http::Response::builder()
             .status(http::StatusCode::OK)
-            .header(http::header::CONTENT_TYPE, "text/html; charset=UTF-8")
+            .header(http::header::CONTENT_TYPE, content_type)
+            .header(http::header::CONTENT_LENGTH, bytes.len())
             .body(bytes.into())
             .unwrap();
         Ok(response)
@@ -67,5 +81,11 @@ impl RequestHandler for FileService {
                 .body(Body::empty())
                 .unwrap())
         })
+    }
+}
+
+impl Display for FileService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "FileService")
     }
 }

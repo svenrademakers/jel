@@ -1,5 +1,6 @@
 use crate::services::{FileService, MatchService, RequestHandler, SessionMananger};
 use hyper::Body;
+use log::{debug, trace};
 use std::io;
 use std::{collections::HashMap, sync::Arc};
 
@@ -32,6 +33,13 @@ impl HttpServer {
     ) -> Result<http::Response<Body>, io::Error> {
         self.remove_hostname_from_uri(&mut request);
         if let Some(denied_response) = self.session_manager.has_permission(&request).await {
+            debug!(
+                "{} for {} {}",
+                denied_response.status(),
+                request.uri(),
+                request.method()
+            );
+            trace!("request headers: {:?}", request.headers());
             return Ok(denied_response);
         }
 
@@ -41,13 +49,18 @@ impl HttpServer {
             .or_else(|| self.services.get("/"))
             .expect("there should should always be a default http handler defined");
 
+        debug!("handling request {} {}", request.uri(), request.method());
         let response = handler.invoke(request).await;
         response
     }
 
     fn remove_hostname_from_uri(&self, request: &mut http::Request<Body>) {
-        let uri =
-            http::uri::Uri::try_from(request.uri().path().trim_start_matches(&self.host)).unwrap();
-        *request.uri_mut() = uri;
+        if let Some(authority) = request.uri().authority() {
+            let uri = http::uri::Uri::try_from(
+                request.uri().path().trim_start_matches(authority.as_str()),
+            )
+            .unwrap();
+            *request.uri_mut() = uri;
+        }
     }
 }

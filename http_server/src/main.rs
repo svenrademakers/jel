@@ -1,6 +1,5 @@
 mod http_server;
 mod logger;
-mod redirect_server;
 mod services;
 mod tls_config;
 mod tls_stream;
@@ -33,12 +32,20 @@ struct Args {
     private_key: PathBuf,
     #[clap(long, default_value = "../test_certificates/server.crt")]
     certificates: PathBuf,
+    #[clap(short, long)]
+    verbose: bool,
 }
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    init_log(log::LevelFilter::Info);
     let args = Args::parse();
+
+    let log_level = match args.verbose {
+        true => log::Level::Trace,
+        false => log::Level::Info,
+    };
+
+    init_log(log_level);
 
     // load service context data
     let tls_cfg = load_server_config(&args.certificates, &args.private_key)?;
@@ -46,6 +53,7 @@ async fn main() -> io::Result<()> {
 
     // define how a service is made. when a client connects it will get its own context to talk with
     let make_service = make_service_fn(|_| {
+        debug!("handle client");
         let context = service_context.clone();
         async {
             let service = service_fn(move |request| {
@@ -77,9 +85,10 @@ async fn main() -> io::Result<()> {
 async fn redirect_server(hostname: &str, host: &str, port: u16) -> Result<(), hyper::Error> {
     let make_svc = make_service_fn(|_conn| {
         let redirect_location = format!("https://{}", hostname);
-        let service = service_fn(move |_| {
+        let service = service_fn(move |req| {
             let location = redirect_location.clone();
-            async {
+            async move {
+                debug!("redirecting {} to {}", req.uri(), &location);
                 http::Response::builder()
                     .status(http::StatusCode::MOVED_PERMANENTLY)
                     .header("Location", location)

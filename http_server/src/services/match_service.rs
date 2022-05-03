@@ -2,8 +2,11 @@ use super::RequestHandler;
 use async_trait::async_trait;
 use hyper::client::Client;
 use hyper::{Body, Request};
+use hyper_tls::HttpsConnector;
+use log::info;
 use serde_json::json;
 use std::error::Error;
+use std::fmt::Display;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Default)]
@@ -37,15 +40,16 @@ impl MatchService {
     }
 
     pub async fn refresh(&self) -> Result<Vec<u8>, Box<dyn Error>> {
-        let client = Client::new();
+        let https = HttpsConnector::new();
+        let client = Client::builder().build::<_, hyper::Body>(https);
+
         let request = Request::builder()
             .method(hyper::Method::GET)
             .uri(self.url.clone())
             .header("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
             .header("X-RapidAPI-Key", env!("API_KEY"))
-            .body(Body::default())
+            .body(Body::empty())
             .unwrap();
-
         let res = client.request(request).await?;
         let bytes = hyper::body::to_bytes(res.into_body()).await?;
         let str = std::str::from_utf8(&bytes[..])?;
@@ -68,13 +72,19 @@ impl MatchService {
     }
 
     async fn get_matches_slice(&self) -> Vec<u8> {
-        match self.data.blocking_read().is_empty() {
+        match self.data.read().await.is_empty() {
             true => {
                 let new_data = self.refresh().await.unwrap();
                 *self.data.write().await = new_data.clone();
                 new_data
             }
-            false => self.data.blocking_read().clone(),
+            false => self.data.read().await.clone(),
         }
+    }
+}
+
+impl Display for MatchService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MatchService")
     }
 }

@@ -8,11 +8,16 @@ use log::Record;
 use log::{info, Level, LevelFilter};
 use syslog::{BasicLogger, Facility, Formatter3164};
 
+#[cfg(debug_assertions)]
+const MAX_LOG_LEVEL: LevelFilter = LevelFilter::Trace;
+#[cfg(not(debug_assertions))]
+const MAX_LOG_LEVEL: LevelFilter = LevelFilter::Info;
+
 /// setup logging component. logs to terminal in debug mode. otherwise to syslog
-pub fn init_log(max_log_level: LevelFilter) {
+pub fn init_log(log_level: Level) {
     let box_logger_result;
     if cfg!(debug_assertions) {
-        box_logger_result = log::set_boxed_logger(Box::new(TerminalLogger::new(max_log_level)));
+        box_logger_result = log::set_boxed_logger(Box::new(TerminalLogger::new(log_level)));
     } else {
         let formatter = Formatter3164 {
             facility: Facility::LOG_USER,
@@ -31,9 +36,9 @@ pub fn init_log(max_log_level: LevelFilter) {
     }
 
     box_logger_result
-        .map(|()| log::set_max_level(max_log_level))
+        .map(|()| log::set_max_level(MAX_LOG_LEVEL))
         .expect("logger must be initialized successfully");
-    info!("initialized logger with max_level {}", max_log_level);
+    info!("initialized logger with max_level {}", log_level);
 }
 
 macro_rules! forward_log {
@@ -47,18 +52,18 @@ macro_rules! forward_log {
 }
 
 struct TerminalLogger {
-    max_log_level: LevelFilter,
+    log_level: Level,
 }
 
 impl TerminalLogger {
-    fn new(max_log_level: LevelFilter) -> Self {
-        TerminalLogger { max_log_level }
+    fn new(log_level: Level) -> Self {
+        TerminalLogger { log_level }
     }
 }
 
 impl log::Log for TerminalLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.max_log_level
+        metadata.level() <= self.log_level
     }
 
     fn log(&self, record: &Record) {
