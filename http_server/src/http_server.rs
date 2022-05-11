@@ -1,4 +1,4 @@
-use crate::services::{FileService, MatchService, RequestHandler, SessionMananger};
+use crate::services::{FileService, RequestHandler, SessionMananger};
 use hyper::Body;
 use log::{debug, trace};
 use std::io;
@@ -8,11 +8,10 @@ use std::{collections::HashMap, sync::Arc};
 pub struct HttpServer {
     services: HashMap<&'static str, Arc<dyn RequestHandler>>,
     session_manager: SessionMananger,
-    host: String,
 }
 
 impl HttpServer {
-    pub async fn new(www_dir: std::path::PathBuf, host: &str) -> io::Result<Self> {
+    pub async fn new(www_dir: std::path::PathBuf) -> io::Result<Self> {
         let mut services: HashMap<&'static str, Arc<dyn RequestHandler>> = HashMap::new();
         services.insert("/", Arc::new(FileService::new(www_dir).await?));
         services.insert("/dologin", Arc::new(SessionMananger::new()));
@@ -20,7 +19,6 @@ impl HttpServer {
         Ok(HttpServer {
             services,
             session_manager: SessionMananger::new(),
-            host: format!("https://{}", host),
         })
     }
 
@@ -28,7 +26,7 @@ impl HttpServer {
     where
         T: RequestHandler,
     {
-        self.services.insert(uri, Arc::new(service ));
+        self.services.insert(uri, Arc::new(service));
     }
 
     pub async fn handle_request(
@@ -53,8 +51,27 @@ impl HttpServer {
             .or_else(|| self.services.get("/"))
             .expect("there should should always be a default http handler defined");
 
-        debug!("handling request {} {}", request.uri(), request.method());
+        debug!(
+            "handling request {} {} using {}",
+            &request.uri(),
+            &request.method(),
+            handler
+        );
+        
         let response = handler.invoke(request).await;
+        match &response {
+            Ok(res) => debug!(
+                "successful:{} len:{}",
+                res.status(),
+                res.headers()
+                    .get(http::header::CONTENT_LENGTH)
+                    .map(http::HeaderValue::to_str)
+                    .map(Result::unwrap_or_default)
+                    .unwrap_or("")
+            ),
+            Err(e) => debug!("failed: {}", e),
+        }
+
         response
     }
 

@@ -1,6 +1,8 @@
 <script>
     const fixtures = [];
     $.get("matches", function (data) {
+        window.alert("sometext");
+
         // todo return an json map based on fixture ids
         fixtures = JSON.parse(data);
     });
@@ -53,7 +55,14 @@
     }
 
     $(document).ready(function () {
-        let output;
+        var player = videojs('my_video_1', {
+            autoplay: true,
+            liveui: true,
+            inactivityTimeout: 0,
+        }, function () {
+            videojs.log("player loaded", this.currentSrc());
+        });
+
         let x = upcoming_fixture_index();
         set_current_fixture(new Match())
         load_schedule_table(x);
@@ -87,13 +96,7 @@
         $("#schedule_table").html(output);
     }
 
-    var player = videojs('my_video_1', {
-        autoplay: true,
-        liveui: true,
-        inactivityTimeout: 0,
-    }, function () {
-        videojs.log("player loaded", this.currentSrc());
-    });
+
 
     function upcoming_fixture_index() {
         for (let x = 0; x < fixtures.length; x++) {
@@ -139,8 +142,8 @@
         <source src="http://live.svenrademakers.com:8080/hls/live.m3u8" type="application/x-mpegURL">
         <source src="http://live.svenrademakers.com:8080/dash/live.mpd" type='application/dash+xml'>
     </video-js>
-    <script src="node_modules/video.js/dist/video.min.js"></script>
-    <script src="node_modules/@videojs/http-streaming/dist/videojs-http-streaming.min.js">
+    <script src="js/video.min.js"></script>
+    <script src="js/videojs-http-streaming.min.js">
     </script>
     <style>
         .disabled {

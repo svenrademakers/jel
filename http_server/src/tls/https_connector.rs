@@ -1,17 +1,8 @@
-use std::{error::Error, sync::Arc, task::Poll};
-
+use std::{sync::Arc, task::Poll};
 use futures_util::future::BoxFuture;
 use http::Uri;
-use hyper::{
-    client::{
-        conn::Connection,
-        connect::{Connect, Connected},
-        HttpConnector,
-    },
-    service::Service,
-};
-use tokio::net::TcpStream;
-use tokio_rustls::{client::TlsStream, TlsConnector};
+use hyper::{client::HttpConnector, service::Service};
+use tokio_rustls::TlsConnector;
 
 use super::TlsClientStream;
 

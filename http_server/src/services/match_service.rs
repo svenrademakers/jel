@@ -4,7 +4,7 @@ use super::RequestHandler;
 use async_trait::async_trait;
 use hyper::client::Client;
 use hyper::{Body, Request};
-use log::info;
+use log::{debug, info, trace};
 use serde_json::json;
 use std::error::Error;
 use std::fmt::Display;
@@ -23,6 +23,7 @@ impl RequestHandler for MatchService {
         Ok(http::Response::builder()
             .status(http::StatusCode::OK)
             .header(http::header::CONTENT_TYPE, "application/json")
+            .header(http::header::CONTENT_LENGTH, data.len())
             .body(data.into())
             .unwrap())
     }
@@ -41,6 +42,7 @@ impl MatchService {
     }
 
     pub async fn refresh(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        debug!("downloading match data from football-api");
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
 
@@ -57,6 +59,7 @@ impl MatchService {
         let res = client.request(request).await?;
         let bytes = hyper::body::to_bytes(res.into_body()).await?;
         let str = std::str::from_utf8(&bytes[..])?;
+        trace!("RECV {}", str);
         let json: serde_json::Value = serde_json::from_str(str)?;
 
         let mut fixtures = serde_json::Map::new();

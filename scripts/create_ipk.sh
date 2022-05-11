@@ -23,14 +23,16 @@ Installed-Size: $(du -s $IPK_DIR/DATA | awk '{print $1; exit}')
 
 function create_postinst() {
     echo "#!/bin/sh
-/$install_prefix/$package_name -w /$www_install_prefix
+/$install_prefix/$package_name --conf /opt/etc/$package_name/conf.yaml
 " > "$IPK_DIR/CONTROL/postinst"
 }
 
 function create_prerm() {
     echo "#!/bin/sh
 pid=\$(pidof "$package_name")
-kill \$pid
+if [[ \$pid ]]; then
+    kill \$pid
+fi
 " >  "$IPK_DIR/CONTROL/prerm"
 }
 
@@ -77,9 +79,9 @@ function create_package_repository() {
 
 package_data
 create_control_file
-#create_postinst
-#create_prerm
+create_postinst
+create_prerm
 chmod -R 755 "$IPK_DIR"
-#chmod -R 544 "$IPK_DIR/$www_install_prefix"
+chmod -R 544 "$IPK_DIR/DATA/$www_install_prefix"
 create_ipk
 create_package_repository
