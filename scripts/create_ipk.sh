@@ -82,6 +82,6 @@ create_control_file
 create_postinst
 create_prerm
 chmod -R 755 "$IPK_DIR"
-chmod -R 544 "$IPK_DIR/DATA/$www_install_prefix"
+chmod -R 744 "$IPK_DIR/DATA/$www_install_prefix"
 create_ipk
 create_package_repository
