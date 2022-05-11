@@ -2,53 +2,32 @@ mod http_server;
 mod logger;
 mod services;
 mod tls;
+mod cli;
 
+use crate::cli::get_config;
 use crate::services::MatchService;
 use crate::tls::{load_server_config, TlsAcceptor};
-use clap::Parser;
 use http_server::HttpServer;
 use hyper::server::conn::AddrIncoming;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Server};
 use log::*;
 use logger::init_log;
-use std::fmt::Debug;
 use std::io;
-use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    #[clap(short, long, value_name = "PATH", default_value = "/opt/share/www")]
-    www_dir: PathBuf,
-    #[clap(short, long, default_value_t = 80)]
-    port: u16,
-    #[clap(short, long, default_value = "0.0.0.0")]
-    host: String,
-    #[clap(long, default_value = "127.0.0.1")]
-    hostname: String,
-    #[clap(long, default_value = "../test_certificates/server.key")]
-    private_key: PathBuf,
-    #[clap(long, default_value = "../test_certificates/server.crt")]
-    certificates: PathBuf,
-    #[clap(short, long)]
-    verbose: bool,
-}
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let args = Args::parse();
-
-    let log_level = match args.verbose {
+    let config = get_config();
+    let log_level = match config.verbose {
         true => log::Level::Debug,
         false => log::Level::Info,
     };
-
     init_log(log_level);
 
     // load service context data
-    let tls_cfg = load_server_config(&args.certificates, &args.private_key)?;
-    let mut service_context = HttpServer::new(args.www_dir).await?;
+    let tls_cfg = load_server_config(&config.certificates, &config.private_key)?;
+    let mut service_context = HttpServer::new(config.www_dir).await?;
     service_context.append_service("/matches", MatchService::new("2022", "11075"));
 
     // define how a service is made. when a client connects it will get its own context to talk with
@@ -64,12 +43,12 @@ async fn main() -> io::Result<()> {
         }
     });
 
-    let addr = format!("{}:{}", args.host, 443).parse().unwrap();
+    let addr = format!("{}:{}", config.host, 443).parse().unwrap();
     let incoming = AddrIncoming::bind(&addr).unwrap();
     info!("listening on interface {}", addr);
 
     let server = Server::builder(TlsAcceptor::new(tls_cfg, incoming)).serve(make_service);
-    let redirect_server = redirect_server(&args.hostname, &args.host, args.port);
+    let redirect_server = redirect_server(&config.hostname, &config.host, config.port);
 
     let result = tokio::select! {
         res = server => res,

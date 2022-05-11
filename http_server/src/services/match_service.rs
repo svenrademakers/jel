@@ -4,7 +4,7 @@ use super::RequestHandler;
 use async_trait::async_trait;
 use hyper::client::Client;
 use hyper::{Body, Request};
-use log::{debug, info, trace};
+use log::{debug, trace};
 use serde_json::json;
 use std::error::Error;
 use std::fmt::Display;

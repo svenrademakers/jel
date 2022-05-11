@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use hyper::client::connect::{Connected, Connection, HttpInfo};
+use hyper::client::connect::{Connected, Connection};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
