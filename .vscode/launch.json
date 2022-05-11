@@ -8,7 +8,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "Debug",
-            "program": "${workspaceFolder}/http_server/target/debug/ronaldos-http-server.exe",
+            "program": "${workspaceFolder}/http_server/target/debug/ronaldos_webserver.exe",
             "args": ["-w", "${workspaceFolder}/http_server/www"],
             "cwd": "${workspaceFolder}/http_server"
         }

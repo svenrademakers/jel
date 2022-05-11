@@ -1,11 +1,10 @@
 mod http_server;
 mod logger;
 mod services;
-mod tls_config;
-mod tls_stream;
+mod tls;
 
-use crate::tls_config::load_server_config;
-use crate::tls_stream::TlsAcceptor;
+use crate::services::MatchService;
+use crate::tls::{TlsAcceptor, load_server_config};
 use clap::Parser;
 use http_server::HttpServer;
 use hyper::server::conn::AddrIncoming;
@@ -49,7 +48,8 @@ async fn main() -> io::Result<()> {
 
     // load service context data
     let tls_cfg = load_server_config(&args.certificates, &args.private_key)?;
-    let service_context = HttpServer::new(args.www_dir, &args.hostname).await?;
+    let mut service_context = HttpServer::new(args.www_dir, &args.hostname).await?;
+    service_context.append_service("/matches", MatchService::new("2022", "11075"));
 
     // define how a service is made. when a client connects it will get its own context to talk with
     let make_service = make_service_fn(|_| {

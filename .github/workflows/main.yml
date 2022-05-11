@@ -1,4 +1,4 @@
-name: Ronaldo's CI
+name: aarch64-openwrt-merlin
 on:
   push:
     branches: [ master ]
@@ -9,25 +9,44 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  debian-build:
+  aarch64-build:
     runs-on: ubuntu-latest
-    env:
-      API_KEY: ${{ secrets.API_KEY }}
-      USERNAME: ${{ secrets.USERNAME }}
-      PASSWORD: ${{ secrets.PASSWORD }}
     steps:
-      - name: install aarch64 toolchain
-        run: sudo apt-get install gcc-aarch64-linux-gnu && rustup target add aarch64-unknown-linux-gnu && cargo install cargo-deb
       - name: checkout git repo
         uses: actions/checkout@v2
-      - name: build http-server aarch64
-        run: cargo build --manifest-path http_server/Cargo.toml --release --target aarch64-unknown-linux-gnu
-      - name: archiving .deb package
-        run: cargo deb --no-build --manifest-path http_server/Cargo.toml --target aarch64-unknown-linux-gnu
-      - name: upload artifacts
-        uses: actions/upload-artifact@v2
+      - name: build http-server
+        run: |
+          chmod -R 777 $GITHUB_WORKSPACE &&\
+          docker run -dt -v $GITHUB_WORKSPACE:$GITHUB_WORKSPACE --name asuswrt-merlin-build acrisliu/asuswrt-merlin-build &&\
+          docker exec --workdir $GITHUB_WORKSPACE \
+          -e RUST_TARGET=aarch64-unknown-linux-gnu \
+          -e PASSWORD=${{ secrets.PASSWORD }} \
+          -e USERNAME=${{ secrets.USERNAME }} \
+          asuswrt-merlin-build scripts/build_aarch64_openwrt.sh
+      - name: archiving .ipk package and create index
+        run: |
+          cargo install cargo-get &&\
+          git clone --depth 1 https://git.yoctoproject.org/opkg-utils &&\
+          cd ./opkg-utils && sudo make install && cd .. &&\
+          RUST_OUT=http_server/target/aarch64-unknown-linux-gnu/release \
+          IPK_DIR=ronaldos_package \
+          REPOSITORY_DIR=ronaldos_repository \
+          GROUP=root \
+          OWNER=admin \
+          scripts/create_ipk.sh
+      # - name: upload artifacts
+      #   if: always()
+      #   uses: actions/upload-artifact@v3.0.0
+      #   with:
+      #     name: ronaldos_repository
+      #     path: |
+      #       http_server/target/*/release/build/*/output
+      #       http_server/target/*/build/*/output
+      - name: updating package index
+        uses: siva1024/scp-deployer@v1.0
         with:
-          name: ronaldos http server
-          path: |
-            http_server/target/aarch64-unknown-linux-gnu/debian/*.deb
-            http_server/www
+          host: svenrademakers.com 
+          username: admin
+          key: ${{ secrets.SSH_PASS }}
+          source: ronaldos_repository
+          target: /opt/share/nginx/html

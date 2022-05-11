@@ -13,18 +13,22 @@ pub struct HttpServer {
 
 impl HttpServer {
     pub async fn new(www_dir: std::path::PathBuf, host: &str) -> io::Result<Self> {
-        let host = format!("https://{}", host);
-
         let mut services: HashMap<&'static str, Arc<dyn RequestHandler>> = HashMap::new();
         services.insert("/", Arc::new(FileService::new(www_dir).await?));
-        services.insert("/matches", Arc::new(MatchService::new("2022", "11075")));
         services.insert("/dologin", Arc::new(SessionMananger::new()));
 
         Ok(HttpServer {
             services,
             session_manager: SessionMananger::new(),
-            host,
+            host: format!("https://{}", host),
         })
+    }
+
+    pub fn append_service<T>(&mut self, uri: &'static str, service: T)
+    where
+        T: RequestHandler,
+    {
+        self.services.insert(uri, Arc::new(service ));
     }
 
     pub async fn handle_request(

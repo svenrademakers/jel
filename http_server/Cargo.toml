@@ -1,8 +1,9 @@
 [package]
-name = "ronaldos-http-server"
+name = "ronaldos_webserver"
 version = "0.1.0"
 edition = "2021"
 authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
+description = "Rust https server including ronaldo's own specific http services"
 
 [dependencies]
 clap = { version="*", features = ["derive"] }
@@ -12,7 +13,7 @@ async-trait = "*"
 http = "*"
 chrono = "*"
 log = "*"
-hyper = {version = "*", features = ["full"]}
+hyper = {version = "*", features = ["full", "tcp"]}
 tokio-rustls = "*"
 rustls-pemfile = "*"
 futures-util = "*"
@@ -21,4 +22,4 @@ serde = "*"
 syslog = "*"
 once_cell = "*"
 base64="*"
-hyper-tls = "*"
+webpki-roots="*"

@@ -1,8 +1,9 @@
+use crate::tls::HttpsConnector;
+
 use super::RequestHandler;
 use async_trait::async_trait;
 use hyper::client::Client;
 use hyper::{Body, Request};
-use hyper_tls::HttpsConnector;
 use log::info;
 use serde_json::json;
 use std::error::Error;
@@ -47,7 +48,10 @@ impl MatchService {
             .method(hyper::Method::GET)
             .uri(self.url.clone())
             .header("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
-            .header("X-RapidAPI-Key", env!("API_KEY"))
+            .header(
+                "X-RapidAPI-Key",
+                std::env::var("API_KEY").unwrap_or_default(),
+            )
             .body(Body::empty())
             .unwrap();
         let res = client.request(request).await?;
@@ -57,7 +61,12 @@ impl MatchService {
 
         let mut fixtures = serde_json::Map::new();
         for fixt in json["response"].as_array().unwrap() {
-            let score = format!("{} - {}", fixt["goals"]["home"], fixt["goals"]["away"]);
+            let score;
+            if fixt["goals"]["home"] == json!(null) || fixt["goals"]["away"] == json!(null) {
+                score = "".to_string();
+            } else {
+                score = format!("{} - {}", fixt["goals"]["home"], fixt["goals"]["away"]);
+            }
             let match_entry = json! {{
                 "home" : fixt["teams"]["home"]["name"],
                 "away" : fixt["teams"]["away"]["name"],
