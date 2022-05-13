@@ -1,3 +1,3 @@
-[target.aarch64-unknown-linux-gnu]
-linker = "aarch64-linux-gcc"
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-ld"
 #rustflags = ["-C", "link-args=-Wl,-rpath,/opt/lib","-C", "link-args=-fuse-ld=aarch64-linux-ldd"]
