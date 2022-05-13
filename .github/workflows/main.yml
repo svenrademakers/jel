@@ -11,6 +11,8 @@ env:
 jobs:
   aarch64-build:
     runs-on: ubuntu-latest
+    env:
+      RUST_TARGET: "aarch64-unknown-none"
     steps:
       - name: checkout git repo
         uses: actions/checkout@v2
@@ -19,7 +21,7 @@ jobs:
           chmod -R 777 $GITHUB_WORKSPACE &&\
           docker run -dt -v $GITHUB_WORKSPACE:$GITHUB_WORKSPACE --name asuswrt-merlin-build acrisliu/asuswrt-merlin-build &&\
           docker exec --workdir $GITHUB_WORKSPACE \
-          -e RUST_TARGET=aarch64-unknown-linux-gnu \
+          -e RUST_TARGET=$RUST_TARGET \
           -e PASSWORD=${{ secrets.PASSWORD }} \
           -e USERNAME=${{ secrets.USERNAME }} \
           asuswrt-merlin-build scripts/build_aarch64_openwrt.sh
@@ -28,7 +30,7 @@ jobs:
           cargo install cargo-get &&\
           git clone --depth 1 https://git.yoctoproject.org/opkg-utils &&\
           cd ./opkg-utils && sudo make install && cd .. &&\
-          RUST_OUT=http_server/target/aarch64-unknown-linux-gnu/release \
+          RUST_OUT=http_server/target/$RUST_TARGET/release \
           IPK_DIR=ronaldos_package \
           REPOSITORY_DIR=ronaldos_repository \
           GROUP=root \
