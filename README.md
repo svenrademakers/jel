@@ -15,5 +15,5 @@ the application can be installed via the opkg package manager. In order to do so
 ```bash
 echo "src ronaldos_repository  http://svenrademakers.com:81/ronaldos_repository" >> /opt/etc/opkg.conf
 opkg update
-opkg list ronaldos_webserver
+opkg list ronaldos-webserver
 ```

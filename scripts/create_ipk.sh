@@ -16,7 +16,6 @@ Architecture: $architecture
 Maintainer: $authors
 Description: $description
 Priority: optional
-Depends: gcc
 Installed-Size: $(du -s $IPK_DIR/DATA | awk '{print $1; exit}')
 " > "$IPK_DIR/CONTROL/control"
 }
