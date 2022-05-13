@@ -12,4 +12,4 @@ function install_rust() {
 . /root/env/bcm-hnd-802.11ax.sh
 install_rust
 aarch64-linux-gcc -v
-TARGET_CC=aarch64-linux-gcc cargo build --manifest-path http_server/Cargo.toml --release --target $RUST_TARGET
+TARGET_CC=aarch64-linux-gcc cargo build --manifest-path http_server/Cargo.toml --release --target $RUST_TARGET -vv
