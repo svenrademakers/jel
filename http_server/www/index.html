@@ -1,141 +1,5 @@
-<script>
-    const fixtures = [];
-    $.get("matches", function (data) {
-        window.alert("sometext");
-
-        // todo return an json map based on fixture ids
-        fixtures = JSON.parse(data);
-    });
-
-    class Match {
-        constructor(fixture_id) {
-            this.fixture_id = fixture_id;
-        }
-
-        get home() {
-            return fixtures[this.fixture_id]["home"];
-        }
-
-        get away() {
-            return fixtures[this.fixture_id]["away"];
-        }
-
-        get venue() {
-            return fixtures[this.fixture_id]["venue"];
-        }
-
-        get score() {
-            return fixtures[this.fixture_id]["score"];
-        }
-
-        get date() {
-            function get_date(date) {
-                const nth = function (d) {
-                    const dString = String(d);
-                    const last = +dString.slice(-2);
-                    if (last > 3 && last < 21) return 'th';
-                    switch (last % 10) {
-                        case 1:
-                            return "st";
-                        case 2:
-                            return "nd";
-                        case 3:
-                            return "rd";
-                        default:
-                            return "th";
-                    }
-                }
-                let output = "<div>" + date.getMonth() + " " + date.getDay() + " " + nth(date.getDay()) + "</div>";
-                output += "<div>" + date.getHour() + ":" + date.getMinute() + "</div>";
-                return output;
-            }
-            let date = new Date(fixtures[this.fixture_id]["timestamp"]);
-            get_date(date)
-        }
-    }
-
-    $(document).ready(function () {
-        var player = videojs('my_video_1', {
-            autoplay: true,
-            liveui: true,
-            inactivityTimeout: 0,
-        }, function () {
-            videojs.log("player loaded", this.currentSrc());
-        });
-
-        let x = upcoming_fixture_index();
-        set_current_fixture(new Match())
-        load_schedule_table(x);
-
-    })
-
-    function load_schedule_table(x) {
-        for (let i = Math.max(0, x - 2); i < fixtures.length; i++) {
-            const match = new Match(fixtures[i]);
-
-            // disable previous fixtures
-            if (i <= x) {
-                output += "<tr class=\"disabled\">";
-            } else {
-                output += "<tr>";
-            }
-            output += "<th scope=\"row\">" + match.date + "</th>";
-            output += "<td>" + match.home +
-                "</td>";
-            output += "<td>" + match.away +
-                "</td>";
-            output += "<td>" + match.venue +
-                "</td>";
-            output += "<td>" + match.score +
-                "</td>";
-            if (has_watch(match.fixture_id)) {
-                output += "<td><button type=\"button\" onclick=\"set_current_fixture(new Match(" + match.fixture_id + "))\" class=\"btn btn-outline-primary\">Watch</button></td>";
-            }
-            output += "</tr>";
-        }
-        $("#schedule_table").html(output);
-    }
-
-
-
-    function upcoming_fixture_index() {
-        for (let x = 0; x < fixtures.length; x++) {
-            let game_time = fixtures[x]["fixture"]["timestamp"];
-            if (game_time > time()) {
-                return --x;
-            }
-        }
-        return 0;
-    }
-
-    function has_watch(fixt_id) {
-        // return file_exists("matches/hls/".fixt_id.
-        //         ".m3u8") ||
-        //     file_exists("matches/dash/".fixt_id.
-        //         ".mpd");
-        return false;
-    }
-
-    function set_current_fixture(match, live = false) {
-        $("#current_title").text(match.home + " - " + match.away);
-        if (live) {
-            $("#current_title").append(" <span class=\"badge badge-danger\">Live</span>");
-        }
-
-        var hls_source = $("<source>", {
-            type: "application / x - mpegURL ",
-            "src": "hls/" + match.fixture_id + ".m3u8",
-        });
-
-        var dash_source = $("<source>", {
-            type: "application/dash+xml",
-            "src": "dash/" + match.fixture_id + ".mpd",
-        });
-
-        $(".my_video_1").html(hls_source);
-        $(".my_video_1").append(dash_source);
-    }
-</script>
+<script src="js/jquery-dateformat.min.js"></script>
+<script src="js/fixtures.js"></script>
 <h4 id="current_title"></h4>
 <div class="row embed-responsive embed-responsive-16by9 pt-2">
     <video-js id="my_video_1" class="vjs-default-skin embed-responsive-item" controls preload="auto">
@@ -143,16 +7,15 @@
         <source src="http://live.svenrademakers.com:8080/dash/live.mpd" type='application/dash+xml'>
     </video-js>
     <script src="js/video.min.js"></script>
-    <script src="js/videojs-http-streaming.min.js">
-    </script>
+    <script src="js/videojs-http-streaming.min.js"></script>
     <style>
         .disabled {
             color: #b9b9b9;
         }
     </style>
 </div>
+<h4 class="pt-4"> Schedule </h4>
 <div class="row pt-5">
-    <h4> Schedule </h4>
     <div class="table-responsive-md">
         <table class="table table-hover">
             <thead>

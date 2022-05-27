@@ -4,7 +4,7 @@ use super::RequestHandler;
 use async_trait::async_trait;
 use hyper::client::Client;
 use hyper::{Body, Request};
-use log::{debug, trace};
+use log::{debug, error};
 use serde_json::json;
 use std::error::Error;
 use std::fmt::Display;
@@ -42,25 +42,13 @@ impl MatchService {
     }
 
     pub async fn refresh(&self) -> Result<Vec<u8>, Box<dyn Error>> {
-        debug!("downloading match data from football-api");
-        let https = HttpsConnector::new();
-        let client = Client::builder().build::<_, hyper::Body>(https);
+        let str = self.request_fixtures().await?;
 
-        let request = Request::builder()
-            .method(hyper::Method::GET)
-            .uri(self.url.clone())
-            .header("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
-            .header(
-                "X-RapidAPI-Key",
-                std::env::var("API_KEY").unwrap_or_default(),
-            )
-            .body(Body::empty())
-            .unwrap();
-        let res = client.request(request).await?;
-        let bytes = hyper::body::to_bytes(res.into_body()).await?;
-        let str = std::str::from_utf8(&bytes[..])?;
-        trace!("RECV {}", str);
-        let json: serde_json::Value = serde_json::from_str(str)?;
+        let json: serde_json::Value = serde_json::from_str(&str)?;
+        if let Some(msg) = json.get("message") {
+            error!("{}", msg);
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "")));
+        }
 
         let mut fixtures = serde_json::Map::new();
         for fixt in json["response"].as_array().unwrap() {
@@ -83,8 +71,29 @@ impl MatchService {
         Ok(serde_json::to_vec(&fixtures)?)
     }
 
+    async fn request_fixtures(&self) -> Result<String, Box<dyn Error>> {
+        debug!("downloading match data from football-api");
+        let https = HttpsConnector::new();
+        let client = Client::builder().build::<_, hyper::Body>(https);
+        let request = Request::builder()
+            .method(hyper::Method::GET)
+            .uri(self.url.clone())
+            .header("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
+            .header(
+                "X-RapidAPI-Key",
+                std::env::var("API_KEY")?,
+            )
+            .body(Body::empty())
+            .unwrap();
+        let res = client.request(request).await?;
+        let bytes = hyper::body::to_bytes(res.into_body()).await?;
+        let str = std::str::from_utf8(&bytes[..])?;
+        Ok(str.to_string())
+    }
+
     async fn get_matches_slice(&self) -> Vec<u8> {
-        match self.data.read().await.is_empty() {
+        let empty = self.data.read().await.is_empty();
+        match empty {
             true => {
                 let new_data = self.refresh().await.unwrap();
                 *self.data.write().await = new_data.clone();

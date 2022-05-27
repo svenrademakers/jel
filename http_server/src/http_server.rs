@@ -12,6 +12,12 @@ pub struct HttpServer {
 
 impl HttpServer {
     pub async fn new(www_dir: std::path::PathBuf) -> io::Result<Self> {
+        if !www_dir.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("{} does not exists", www_dir.to_string_lossy()),
+            ));
+        }
         let mut services: HashMap<&'static str, Arc<dyn RequestHandler>> = HashMap::new();
         services.insert("/", Arc::new(FileService::new(www_dir).await?));
         services.insert("/dologin", Arc::new(SessionMananger::new()));
@@ -57,7 +63,7 @@ impl HttpServer {
             &request.method(),
             handler
         );
-        
+
         let response = handler.invoke(request).await;
         match &response {
             Ok(res) => debug!(
