@@ -14,6 +14,7 @@ use tokio::sync::RwLock;
 pub struct MatchService {
     data: RwLock<Vec<u8>>,
     url: http::uri::Uri,
+    api_key: String,
 }
 
 #[async_trait]
@@ -30,7 +31,7 @@ impl RequestHandler for MatchService {
 }
 
 impl MatchService {
-    pub fn new(season: &str, team: &str) -> Self {
+    pub fn new(season: &str, team: &str, api_key: String) -> Self {
         let api_uri = format!(
             "https://api-football-v1.p.rapidapi.com/v3/fixtures?season={}&team={}",
             season, team
@@ -38,6 +39,7 @@ impl MatchService {
         MatchService {
             data: RwLock::new(Vec::new()),
             url: http::Uri::try_from(api_uri).unwrap(),
+            api_key,
         }
     }
 
@@ -81,7 +83,7 @@ impl MatchService {
             .header("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
             .header(
                 "X-RapidAPI-Key",
-                std::env::var("API_KEY")?,
+                &self.api_key,
             )
             .body(Body::empty())
             .unwrap();

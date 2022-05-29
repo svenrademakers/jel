@@ -11,7 +11,7 @@ pub struct HttpServer {
 }
 
 impl HttpServer {
-    pub async fn new(www_dir: std::path::PathBuf) -> io::Result<Self> {
+    pub async fn new(www_dir: &std::path::Path) -> io::Result<Self> {
         if !www_dir.exists() {
             return Err(io::Error::new(
                 io::ErrorKind::Other,

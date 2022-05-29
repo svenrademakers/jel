@@ -18,7 +18,7 @@ tokio-rustls = "*"
 rustls-pemfile = "*"
 futures-util = "*"
 serde_json= "*"
-serde = "*"
+serde = { version = "*", features = ["derive"] }
 syslog = "*"
 once_cell = "*"
 base64="*"

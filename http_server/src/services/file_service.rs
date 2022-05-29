@@ -3,7 +3,7 @@ use hyper::Body;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::RequestHandler;
 pub struct FileService {
@@ -13,7 +13,7 @@ pub struct FileService {
 }
 
 impl FileService {
-    pub async fn new(www_dir: PathBuf) -> io::Result<Self> {
+    pub async fn new(www_dir: &Path) -> io::Result<Self> {
         let mut header_file = PathBuf::from(&www_dir);
         header_file.push("header.html");
         let header = tokio::fs::read(header_file);
@@ -25,7 +25,7 @@ impl FileService {
         let (f, h) = tokio::join!(footer, header);
 
         Ok(FileService {
-            www_dir,
+            www_dir: www_dir.to_path_buf(),
             header: h?,
             footer: f?,
         })

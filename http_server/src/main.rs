@@ -1,10 +1,10 @@
+mod cli;
 mod http_server;
 mod logger;
 mod services;
 mod tls;
-mod cli;
 
-use crate::cli::get_config;
+use crate::cli::Config;
 use crate::services::MatchService;
 use crate::tls::{load_server_config, TlsAcceptor};
 use http_server::HttpServer;
@@ -15,20 +15,22 @@ use log::*;
 use logger::init_log;
 use std::io;
 
-
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let config = get_config();
-    let log_level = match config.verbose {
+    let config = Config::load();
+    let log_level = match config.verbose() {
         true => log::Level::Debug,
         false => log::Level::Info,
     };
     init_log(log_level);
 
     // load service context data
-    let tls_cfg = load_server_config(&config.certificates, &config.private_key)?;
-    let mut service_context = HttpServer::new(config.www_dir).await?;
-    service_context.append_service("/matches", MatchService::new("2022", "11075"));
+    let tls_cfg = load_server_config(&config.certificates(), &config.private_key())?;
+    let mut service_context = HttpServer::new(config.www_dir()).await?;
+    service_context.append_service(
+        "/matches",
+        MatchService::new("2022", "11075", config.api_key().clone()),
+    );
 
     // define how a service is made. when a client connects it will get its own context to talk with
     let make_service = make_service_fn(|_| {
@@ -43,12 +45,12 @@ async fn main() -> io::Result<()> {
         }
     });
 
-    let addr = format!("{}:{}", config.host, 443).parse().unwrap();
+    let addr = format!("{}:{}", config.host(), 443).parse().unwrap();
     let incoming = AddrIncoming::bind(&addr).unwrap();
     info!("listening on interface {}", addr);
 
     let server = Server::builder(TlsAcceptor::new(tls_cfg, incoming)).serve(make_service);
-    let redirect_server = redirect_server(&config.hostname, &config.host, config.port);
+    let redirect_server = redirect_server(&config.hostname(), &config.host(), *config.port());
 
     let result = tokio::select! {
         res = server => res,
