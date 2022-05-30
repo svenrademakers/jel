@@ -36,19 +36,19 @@ jobs:
           GROUP=root \
           OWNER=admin \
           scripts/create_ipk.sh
-      # - name: upload artifacts
-      #   if: always()
-      #   uses: actions/upload-artifact@v3.0.0
-      #   with:
-      #     name: ronaldos_repository
-      #     path: |
-      #       http_server/target/*/release/build/*/output
-      #       http_server/target/*/build/*/output
-      - name: updating package index
-        uses: siva1024/scp-deployer@v1.0
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v3.0.0
         with:
-          host: svenrademakers.com 
-          username: admin
+          name: ronaldos_repository
+          path: |
+            http_server/target/*/release/build/*/output
+            http_server/target/*/build/*/output
+      - name: updating package index
+        uses: appleboy/scp-action@master
+        with:
+          host: "svenrademakers.com"
+          username: "admin"
           key: ${{ secrets.SSH_PASS }}
-          source: ronaldos_repository
-          target: /opt/share/nginx/html
+          source: "ronaldos_repository"
+          target: "/opt/share/nginx/html"
