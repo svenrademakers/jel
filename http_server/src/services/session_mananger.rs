@@ -1,6 +1,7 @@
 use super::RequestHandler;
 use async_trait::async_trait;
 use chrono::Duration;
+use http::HeaderMap;
 use hyper::Body;
 use log::debug;
 use std::{fmt::Display, ops::Add};
@@ -50,9 +51,23 @@ impl SessionMananger {
     pub async fn has_permission(
         &self,
         request: &http::Request<Body>,
-    ) -> Option<http::Response<Body>> {
+    ) -> Result<Option<http::HeaderMap>, http::Response<Body>> {
         if request.uri() == "/login.html" || request.uri() == "/dologin" {
-            return None;
+            return Ok(None);
+        }
+
+        if let Some(query) = request.uri().query() {
+            debug!("has query {}", query);
+
+            match self.create_session(query.trim().as_bytes()) {
+                Some(session) => {
+                    return Ok(Some(cookie_header(session)));
+                }
+                None => {
+                    debug!("query no good");
+                    return Err(denied_response(request.uri()));
+                }
+            }
         }
 
         let valid_session = request
@@ -65,8 +80,8 @@ impl SessionMananger {
             .unwrap_or_default();
 
         match valid_session {
-            true => None,
-            false => Some(denied_response(request.uri())),
+            true => Ok(None),
+            false => Err(denied_response(request.uri())),
         }
     }
 
@@ -81,6 +96,22 @@ impl SessionMananger {
     }
 }
 
+fn cookie_header(session: String) -> HeaderMap {
+    let expiration = chrono::Local::now().add(Duration::days(31));
+    let mut map: HeaderMap = HeaderMap::new();
+    map.append(
+        http::header::EXPIRES,
+        expiration.to_rfc2822().parse().unwrap(),
+    );
+    map.append(
+        http::header::SET_COOKIE,
+        format!("{}={}; Secure; HttpOnly", SESSION_ID_KEY, session)
+            .parse()
+            .unwrap(),
+    );
+    map
+}
+
 fn denied_response(uri: &http::Uri) -> http::Response<Body> {
     match uri.path().ends_with("html") || uri.path().eq("/") {
         true => http::Response::builder()
@@ -93,6 +124,20 @@ fn denied_response(uri: &http::Uri) -> http::Response<Body> {
             .body(Body::empty())
             .unwrap(),
     }
+}
+
+fn redirect_ok_response(session: &str) -> http::Response<Body> {
+    let expiration = chrono::Local::now().add(Duration::days(31));
+    http::Response::builder()
+        .header(
+            http::header::SET_COOKIE,
+            format!("{}={}; Secure; HttpOnly", SESSION_ID_KEY, session),
+        )
+        .header(http::header::LOCATION, "/index.html")
+        .header(http::header::EXPIRES, expiration.to_rfc2822())
+        .status(http::StatusCode::SEE_OTHER)
+        .body(Body::empty())
+        .unwrap()
 }
 
 #[async_trait]
@@ -111,26 +156,17 @@ impl RequestHandler for SessionMananger {
                 .unwrap()),
             _ => {
                 let body = hyper::body::to_bytes(request).await.unwrap();
+                let response;
                 if let Some(session) = self.create_session(&body) {
-                    let expiration = chrono::Local::now().add(Duration::days(31));
-
-                    Ok(http::Response::builder()
-                        .header(
-                            http::header::SET_COOKIE,
-                            format!("{}={}; Secure; HttpOnly", SESSION_ID_KEY, session),
-                        )
-                        .header(http::header::LOCATION, "/index.html")
-                        .header(http::header::EXPIRES, expiration.to_rfc2822())
-                        .status(http::StatusCode::SEE_OTHER)
-                        .body(Body::empty())
-                        .unwrap())
+                    response = redirect_ok_response(&session);
                 } else {
                     debug!("authentication failed ");
-                    Ok(http::Response::builder()
+                    response = http::Response::builder()
                         .status(http::StatusCode::FORBIDDEN)
                         .body(Body::from("password or username not correct!"))
-                        .unwrap())
+                        .unwrap()
                 }
+                return Ok(response);
             }
         }
     }

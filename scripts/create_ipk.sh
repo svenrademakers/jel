@@ -22,7 +22,7 @@ Installed-Size: $(du -s $IPK_DIR/DATA | awk '{print $1; exit}')
 
 function create_postinst() {
     echo "#!/bin/sh
-/$install_prefix/$package_name --conf /opt/etc/$package_name/conf.yaml
+/$install_prefix/$package_name
 " > "$IPK_DIR/CONTROL/postinst"
 }
 

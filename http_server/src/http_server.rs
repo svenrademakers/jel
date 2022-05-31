@@ -37,18 +37,21 @@ impl HttpServer {
 
     pub async fn handle_request(
         &self,
-        mut request: http::Request<Body>,
+        request: http::Request<Body>,
     ) -> Result<http::Response<Body>, io::Error> {
-        self.remove_hostname_from_uri(&mut request);
-        if let Some(denied_response) = self.session_manager.has_permission(&request).await {
-            debug!(
-                "{} for {} {}",
-                denied_response.status(),
-                request.uri(),
-                request.method()
-            );
-            trace!("request headers: {:?}", request.headers());
-            return Ok(denied_response);
+        let extra_headers;
+        match self.session_manager.has_permission(&request).await {
+            Err(denied_response) => {
+                debug!(
+                    "{} for {} {}",
+                    denied_response.status(),
+                    request.uri(),
+                    request.method()
+                );
+                trace!("request headers: {:?}", request.headers());
+                return Ok(denied_response);
+            }
+            Ok(headers) => extra_headers = headers,
         }
 
         let handler = self
@@ -64,30 +67,28 @@ impl HttpServer {
             handler
         );
 
-        let response = handler.invoke(request).await;
-        match &response {
-            Ok(res) => debug!(
-                "successful:{} len:{}",
-                res.status(),
-                res.headers()
-                    .get(http::header::CONTENT_LENGTH)
-                    .map(http::HeaderValue::to_str)
-                    .map(Result::unwrap_or_default)
-                    .unwrap_or("")
-            ),
+        let mut response = handler.invoke(request).await;
+        match &mut response {
+            Ok(ref mut res) => {
+                if let Some(headers) = extra_headers {
+                    for header in headers {
+                        res.headers_mut().insert(header.0.unwrap(), header.1);
+                    }
+                }
+                debug!(
+                    "successful:{} len:{} headers: {:#?}",
+                    res.status(),
+                    res.headers()
+                        .get(http::header::CONTENT_LENGTH)
+                        .map(http::HeaderValue::to_str)
+                        .map(Result::unwrap_or_default)
+                        .unwrap_or(""),
+                    res.headers()
+                );
+            }
             Err(e) => debug!("failed: {}", e),
         }
 
         response
-    }
-
-    fn remove_hostname_from_uri(&self, request: &mut http::Request<Body>) {
-        if let Some(authority) = request.uri().authority() {
-            let uri = http::uri::Uri::try_from(
-                request.uri().path().trim_start_matches(authority.as_str()),
-            )
-            .unwrap();
-            *request.uri_mut() = uri;
-        }
     }
 }

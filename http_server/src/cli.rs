@@ -12,7 +12,7 @@ pub struct Cli {
 
 macro_rules! config_definitions {
     ($($name:ident : $type:ty, $default:expr),+) => {
-        #[derive(Deserialize, Debug)]
+        #[derive(Deserialize, Debug, Default)]
         pub struct Config {
             $($name: Option<$type>,)*
         }
@@ -20,8 +20,16 @@ macro_rules! config_definitions {
         impl Config {
             pub fn load() -> Self {
                 let cli = Cli::parse();
-                let raw = std::fs::read_to_string(cli.config).expect("passed config file could not be read");
-                let mut cfg  = serde_yaml::from_str::<Config>(&raw).unwrap();
+                let mut cfg  = match std::fs::read_to_string(&cli.config){
+                    Ok(raw) => {
+                          serde_yaml::from_str::<Config>(&raw).unwrap()
+                    }
+                    _ => {
+                        eprintln!("could not read config {}. defaulting config", cli.config.to_string_lossy());
+                        Config::default()
+                    }
+                };
+
                 $(if cfg.$name.is_none() {
                     cfg.$name = Some($default);
                 })*
