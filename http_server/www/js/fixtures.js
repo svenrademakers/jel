@@ -48,7 +48,7 @@ class Match {
 }
 
 $(document).ready(function () {
-    $.get("matches", function (data) {
+    $.get("fixtures", function (data) {
         fixtures = data;
         let x = upcoming_fixture();
         set_current_fixture(x);

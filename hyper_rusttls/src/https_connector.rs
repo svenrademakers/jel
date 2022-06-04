@@ -4,7 +4,7 @@ use http::Uri;
 use hyper::{client::HttpConnector, service::Service};
 use tokio_rustls::TlsConnector;
 
-use super::TlsClientStream;
+use crate::tls_client_stream::TlsClientStream;
 
 #[derive(Clone)]
 pub struct HttpsConnector {

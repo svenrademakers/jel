@@ -1,6 +1,8 @@
-use crate::services::{FileService, RequestHandler, SessionMananger};
+use crate::services::SessionMananger;
 use hyper::Body;
+use hyper_rusttls::service::RequestHandler;
 use log::{debug, trace};
+use std::fmt::Display;
 use std::io;
 use std::{collections::HashMap, sync::Arc};
 
@@ -10,35 +12,9 @@ pub struct HttpServer {
     session_manager: SessionMananger,
 }
 
-impl HttpServer {
-    pub async fn new(www_dir: &std::path::Path) -> io::Result<Self> {
-        if !www_dir.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("{} does not exists", www_dir.to_string_lossy()),
-            ));
-        }
-        let mut services: HashMap<&'static str, Arc<dyn RequestHandler>> = HashMap::new();
-        services.insert("/", Arc::new(FileService::new(www_dir).await?));
-        services.insert("/dologin", Arc::new(SessionMananger::new()));
-
-        Ok(HttpServer {
-            services,
-            session_manager: SessionMananger::new(),
-        })
-    }
-
-    pub fn append_service<T>(&mut self, uri: &'static str, service: T)
-    where
-        T: RequestHandler,
-    {
-        self.services.insert(uri, Arc::new(service));
-    }
-
-    pub async fn handle_request(
-        &self,
-        request: http::Request<Body>,
-    ) -> Result<http::Response<Body>, io::Error> {
+#[async_trait::async_trait]
+impl RequestHandler for HttpServer {
+    async fn invoke(&self, request: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
         let extra_headers;
         match self.session_manager.has_permission(&request).await {
             Err(denied_response) => {
@@ -62,7 +38,7 @@ impl HttpServer {
 
         debug!(
             "handling request {} {} using {}",
-            &request..path(),
+            &request.uri().path(),
             &request.method(),
             handler
         );
@@ -90,5 +66,41 @@ impl HttpServer {
         }
 
         response
+    }
+
+    fn path() -> &'static str
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+}
+
+impl HttpServer {
+    pub async fn new(www_dir: &std::path::Path) -> io::Result<Self> {
+        if !www_dir.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("{} does not exists", www_dir.to_string_lossy()),
+            ));
+        }
+
+        Ok(HttpServer {
+            services: HashMap::new(),
+            session_manager: SessionMananger::new(),
+        })
+    }
+
+    pub fn append_service<T>(&mut self, service: T)
+    where
+        T: RequestHandler,
+    {
+        self.services.insert(T::path(), Arc::new(service));
+    }
+}
+
+impl Display for HttpServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "http Server")
     }
 }

@@ -1,9 +1,8 @@
-use crate::tls::HttpsConnector;
-
-use super::RequestHandler;
 use async_trait::async_trait;
 use hyper::client::Client;
 use hyper::{Body, Request};
+use hyper_rusttls::https_connector::HttpsConnector;
+use hyper_rusttls::service::RequestHandler;
 use log::{debug, error};
 use serde_json::json;
 use std::error::Error;
@@ -28,6 +27,10 @@ impl RequestHandler for MatchService {
             .body(data.into())
             .unwrap())
     }
+
+    fn path() -> &'static str {
+        "/fixtures"
+    }
 }
 
 impl MatchService {
@@ -49,7 +52,10 @@ impl MatchService {
         let json: serde_json::Value = serde_json::from_str(&str)?;
         if let Some(msg) = json.get("message") {
             error!("{}", msg);
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "")));
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "",
+            )));
         }
 
         let mut fixtures = serde_json::Map::new();
@@ -81,10 +87,7 @@ impl MatchService {
             .method(hyper::Method::GET)
             .uri(self.url.clone())
             .header("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
-            .header(
-                "X-RapidAPI-Key",
-                &self.api_key,
-            )
+            .header("X-RapidAPI-Key", &self.api_key)
             .body(Body::empty())
             .unwrap();
         let res = client.request(request).await?;

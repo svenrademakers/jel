@@ -1,24 +1,18 @@
 [package]
-name = "ronaldos-webserver"
+name = "hyper_rusttls"
 version = "0.1.0"
 edition = "2021"
 authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
-description = "Rust https server including ronaldo's own specific http services"
+description = "hyper http library + rustls wrappers"
 
 [dependencies]
-clap = { version="*", features = ["derive"] }
 tokio = { version = "*", features = ["net", "fs", "rt", "rt-multi-thread", "macros", "io-util", "sync"] }
 bytes = "*"
 async-trait = "*"
 http = "*"
-chrono = "*"
 log = "*"
 hyper = {version = "*", features = ["full", "tcp"]}
+tokio-rustls = "*"
+rustls-pemfile = "*"
 futures-util = "*"
-serde_json= "*"
-serde = { version = "*", features = ["derive"] }
-syslog = "*"
-once_cell = "*"
-base64="*"
-serde_yaml="*"
-hyper_rusttls = { path= "../hyper_rusttls" }
+webpki-roots="*"

@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use hyper::Body;
+use hyper_rusttls::service::RequestHandler;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::RequestHandler;
 pub struct FileService {
     www_dir: PathBuf,
     header: Vec<u8>,
@@ -81,6 +81,10 @@ impl RequestHandler for FileService {
                 .body(Body::empty())
                 .unwrap())
         })
+    }
+
+    fn path() -> &'static str {
+        "/"
     }
 }
 

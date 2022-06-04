@@ -1,11 +1,11 @@
 use log::{info, warn};
-use std::{fs, io, path::Path, sync::Arc};
+use std::{fs, io, path::Path};
 use tokio_rustls::rustls;
 
 pub fn load_server_config(
     certificates: &Path,
     private_key: &Path,
-) -> Result<Arc<rustls::ServerConfig>, io::Error> {
+) -> Result<rustls::ServerConfig, io::Error> {
     let certs = load_certs(&certificates)?;
     let key = load_private_key(&private_key)?;
     let mut cfg = rustls::ServerConfig::builder()
@@ -15,7 +15,7 @@ pub fn load_server_config(
         .map_err(|e| error(format!("{}", e)))?;
     cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     info!("loaded tls configuration");
-    Ok(Arc::new(cfg))
+    Ok(cfg)
 }
 
 pub fn load_certs(filename: &std::path::Path) -> io::Result<Vec<rustls::Certificate>> {

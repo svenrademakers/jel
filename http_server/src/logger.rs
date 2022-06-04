@@ -6,8 +6,7 @@ use std::path::PathBuf;
 use log::Metadata;
 use log::Record;
 use log::{info, Level, LevelFilter};
-use syslog::{BasicLogger, Facility, Formatter3164};
-
+//use syslog::{BasicLogger, Facility, Formatter3164};
 
 const MAX_LOG_LEVEL: LevelFilter = LevelFilter::Trace;
 

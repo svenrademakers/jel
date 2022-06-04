@@ -2,15 +2,12 @@ mod cli;
 mod http_server;
 mod logger;
 mod services;
-mod tls;
 
 use crate::cli::Config;
-use crate::services::MatchService;
-use crate::tls::{load_server_config, TlsAcceptor};
+use crate::services::{FileService, MatchService, SessionMananger};
 use http_server::HttpServer;
-use hyper::server::conn::AddrIncoming;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Server};
+use hyper_rusttls::run_server;
+use hyper_rusttls::tls_config::load_server_config;
 use log::*;
 use logger::init_log;
 use std::io;
@@ -27,62 +24,21 @@ async fn main() -> io::Result<()> {
     debug!("loaded:\n {:#?}", config);
 
     // load service context data
-    let tls_cfg = load_server_config(&config.certificates(), &config.private_key())?;
+    let tls_cfg = load_server_config(&config.certificates(), &config.private_key());
     let mut service_context = HttpServer::new(config.www_dir()).await?;
-    service_context.append_service(
-        "/matches",
-        MatchService::new("2022", "11075", config.api_key().clone()),
-    );
+    service_context.append_service(MatchService::new("2022", "11075", config.api_key().clone()));
+    service_context.append_service(FileService::new(config.www_dir()).await?);
+    service_context.append_service(SessionMananger::new());
 
-    // define how a service is made. when a client connects it will get its own context to talk with
-    let make_service = make_service_fn(|_| {
-        debug!("handle client");
-        let context = service_context.clone();
-        async {
-            let service = service_fn(move |request| {
-                let ctx = context.clone();
-                async move { ctx.handle_request(request).await }
-            });
-            Ok::<_, std::io::Error>(service)
-        }
-    });
-
-    let addr = format!("{}:{}", config.host(), 443).parse().unwrap();
-    let incoming = AddrIncoming::bind(&addr).unwrap();
-    info!("listening on interface {}", addr);
-
-    let server = Server::builder(TlsAcceptor::new(tls_cfg, incoming)).serve(make_service);
-    let redirect_server = redirect_server(&config.hostname(), &config.host(), *config.port());
-
-    let result = tokio::select! {
-        res = server => res,
-        res = redirect_server => res,
-    };
-
-    if let Err(e) = result {
-        error!("fatal error. exiting server : {}", e);
+    if let Err(e) = run_server(
+        service_context,
+        format!("").parse().unwrap(),
+        config.hostname(),
+        tls_cfg.ok(),
+    )
+    .await
+    {
+        error!("error running server: {}", e);
     }
     Ok(())
-}
-
-async fn redirect_server(hostname: &str, host: &str, port: u16) -> Result<(), hyper::Error> {
-    let make_svc = make_service_fn(|_conn| {
-        let redirect_location = format!("https://{}", hostname);
-        let service = service_fn(move |req| {
-            let location = redirect_location.clone();
-            async move {
-                debug!("redirecting {} to {}", req.uri(), &location);
-                http::Response::builder()
-                    .status(http::StatusCode::MOVED_PERMANENTLY)
-                    .header("Location", location)
-                    .body(Body::empty())
-            }
-        });
-        async { Ok::<_, std::io::Error>(service) }
-    });
-
-    let addr = format!("{}:{}", host, port).parse().unwrap();
-    let server = Server::bind(&addr).serve(make_svc);
-    info!("listening on interface {}", addr);
-    server.await
 }

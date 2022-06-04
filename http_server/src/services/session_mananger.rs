@@ -1,8 +1,8 @@
-use super::RequestHandler;
 use async_trait::async_trait;
 use chrono::Duration;
 use http::HeaderMap;
 use hyper::Body;
+use hyper_rusttls::service::RequestHandler;
 use log::debug;
 use std::{fmt::Display, ops::Add};
 const SESSION_ID_KEY: &str = "Session_id";
@@ -131,7 +131,7 @@ fn redirect_ok_response(session: &str) -> http::Response<Body> {
     http::Response::builder()
         .header(
             http::header::SET_COOKIE,
-            format!("{}={}; Secure; HttpOnly", SESSION_ID_KEY, session),
+            format!("{}={}; Secure; HttpOnly; SameSite=Strict", SESSION_ID_KEY, session),
         )
         .header(http::header::LOCATION, "/index.html")
         .header(http::header::EXPIRES, expiration.to_rfc2822())
@@ -169,6 +169,10 @@ impl RequestHandler for SessionMananger {
                 return Ok(response);
             }
         }
+    }
+
+    fn path() -> &'static str {
+        "/dologin"
     }
 }
 
