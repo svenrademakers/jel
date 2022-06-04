@@ -1,3 +1,4 @@
+use log::warn;
 use std::{fs, io, path::Path, sync::Arc};
 use tokio_rustls::rustls;
 
@@ -42,10 +43,10 @@ pub fn load_private_key(filename: &std::path::Path) -> io::Result<rustls::Privat
     })?;
     let mut reader = io::BufReader::new(keyfile);
 
-    let keys = rustls_pemfile::rsa_private_keys(&mut reader)
+    let keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
         .map_err(|e| error(format!("failed to load private key {}", e)))?;
     if keys.len() != 1 {
-        return Err(error("expected a single private key".into()));
+        warn!("key lenght != 1. {:?}", keys);
     }
 
     Ok(rustls::PrivateKey(keys[0].clone()))
