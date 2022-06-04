@@ -45,7 +45,7 @@ impl HttpServer {
                 debug!(
                     "{} for {} {}",
                     denied_response.status(),
-                    request.uri(),
+                    request.uri().path(),
                     request.method()
                 );
                 trace!("request headers: {:?}", request.headers());
@@ -62,7 +62,7 @@ impl HttpServer {
 
         debug!(
             "handling request {} {} using {}",
-            &request.uri(),
+            &request..path(),
             &request.method(),
             handler
         );
