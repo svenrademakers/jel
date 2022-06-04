@@ -16,24 +16,24 @@ const MAX_LOG_LEVEL: LevelFilter = LevelFilter::Info;
 /// setup logging component. logs to terminal in debug mode. otherwise to syslog
 pub fn init_log(log_level: Level) {
     let box_logger_result;
-    if cfg!(debug_assertions) {
-        box_logger_result = log::set_boxed_logger(Box::new(TerminalLogger::new(log_level)));
-    } else {
-        let formatter = Formatter3164 {
-            facility: Facility::LOG_USER,
-            hostname: None,
-            process: env!("CARGO_PKG_NAME").into(),
-            pid: std::process::id(),
-        };
+    //  if cfg!(debug_assertions) {
+    box_logger_result = log::set_boxed_logger(Box::new(TerminalLogger::new(log_level)));
+    // } else {
+    //     let formatter = Formatter3164 {
+    //         facility: Facility::LOG_USER,
+    //         hostname: None,
+    //         process: env!("CARGO_PKG_NAME").into(),
+    //         pid: std::process::id(),
+    //     };
 
-        match syslog::unix(formatter).map(BasicLogger::new) {
-            Ok(logger) => box_logger_result = log::set_boxed_logger(Box::new(logger)),
-            Err(e) => {
-                println!("cannot setup syslog component. not logging {}", e);
-                return;
-            }
-        }
-    }
+    //     match syslog::unix(formatter).map(BasicLogger::new) {
+    //         Ok(logger) => box_logger_result = log::set_boxed_logger(Box::new(logger)),
+    //         Err(e) => {
+    //             println!("cannot setup syslog component. not logging {}", e);
+    //             return;
+    //         }
+    //     }
+    // }
 
     box_logger_result
         .map(|()| log::set_max_level(MAX_LOG_LEVEL))
