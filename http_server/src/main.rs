@@ -24,6 +24,8 @@ async fn main() -> io::Result<()> {
     };
     init_log(log_level);
 
+    debug!("loaded:\n {:#?}", config);
+
     // load service context data
     let tls_cfg = load_server_config(&config.certificates(), &config.private_key())?;
     let mut service_context = HttpServer::new(config.www_dir()).await?;

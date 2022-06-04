@@ -8,10 +8,8 @@ use log::Record;
 use log::{info, Level, LevelFilter};
 use syslog::{BasicLogger, Facility, Formatter3164};
 
-#[cfg(debug_assertions)]
+
 const MAX_LOG_LEVEL: LevelFilter = LevelFilter::Trace;
-#[cfg(not(debug_assertions))]
-const MAX_LOG_LEVEL: LevelFilter = LevelFilter::Info;
 
 /// setup logging component. logs to terminal in debug mode. otherwise to syslog
 pub fn init_log(log_level: Level) {

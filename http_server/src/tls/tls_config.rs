@@ -1,4 +1,4 @@
-use log::warn;
+use log::{info, warn};
 use std::{fs, io, path::Path, sync::Arc};
 use tokio_rustls::rustls;
 
@@ -14,10 +14,12 @@ pub fn load_server_config(
         .with_single_cert(certs, key)
         .map_err(|e| error(format!("{}", e)))?;
     cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    info!("loaded tls configuration");
     Ok(Arc::new(cfg))
 }
 
 pub fn load_certs(filename: &std::path::Path) -> io::Result<Vec<rustls::Certificate>> {
+    info!("loading certificates at {}", filename.to_string_lossy());
     let certfile = fs::File::open(filename).map_err(|e| {
         error(format!(
             "failed to open {}: {}",

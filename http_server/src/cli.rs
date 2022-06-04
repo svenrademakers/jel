@@ -3,6 +3,8 @@ use serde::Deserialize;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
+/// CLI structure that loads the commandline arguments. These arguments will be
+/// serialized in this structure
 #[derive(Parser, Debug, Default)]
 #[clap(author, version, about, long_about = None)]
 pub struct Cli {

@@ -17,3 +17,16 @@ echo "src ronaldos_repository  http://svenrademakers.com:81/ronaldos_repository"
 opkg update
 opkg list ronaldos-webserver
 ```
+
+## Running
+
+Application works by passing the config path, `--config <config>`, as argument. ( "/opt/etc/ronaldo.cfg" is used on default). This config file is formatted as yaml. Parameters are written as key-value pairs.
+The following parameters can be set:
+- www_dir: "dir/to/html/root"
+- port: 80 #http port, used for redirecting to https 443
+- host: "0.0.0.0"
+- hostname: "name"
+- private_key: "/path/to/private/key
+- certificates: "/path/to/certificates"
+- verbose: true # log debug, info otherwise
+- api_key: # footbal api key
