@@ -38,7 +38,7 @@ Installed-Size: $(du -s $IPK_DIR/DATA | awk '{print $1; exit}')
 
 function create_systemd_file() {
     systemd_file="$IPK_DIR/DATA/etc/systemd/system/$package_name.service"
-    mkdir -p $systemd_file
+    mkdir -p "$(dirname $systemd_file)"
     echo "[Unit]
 Description=$description
 
