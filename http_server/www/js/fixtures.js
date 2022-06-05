@@ -54,7 +54,7 @@ $(document).ready(function () {
         set_current_fixture(x);
         load_schedule_table(x);
     });
-    var player = videojs('my_video_1', {
+    var player = videojs('video_player', {
         autoplay: true,
         liveui: true,
         inactivityTimeout: 0,
@@ -108,23 +108,31 @@ function has_watch(fixt_id) {
     return false;
 }
 
-function set_current_fixture(match, live = false) {
+function set_current_fixture(match) {
     let fixture = new Match(match);
     $("#current_title").text(fixture.home + " - " + fixture.away);
-    if (live) {
+
+    let start = new Date(0);
+    start.setUTCSeconds(fixtures[match]["timestamp"]);
+    start.setMinutes(start.getMinutes() - 15);
+
+    let end = start;
+    end.setHours(end.getHours() + 2);
+    let now = new Date();
+
+    if (now >= start && now < end) {
         $("#current_title").append(" <span class=\"badge badge-danger\">Live</span>");
+        var hls_source = $("<source>", {
+            type: "application / x - mpegURL ",
+            "src": "hls/" + fixture.fixture_id + ".m3u8",
+        });
+
+        var dash_source = $("<source>", {
+            type: "application/dash+xml",
+            "src": "dash/" + fixture.fixture_id + ".mpd",
+        });
+
+        $(".video_player").html(hls_source);
+        $(".video_player").append(dash_source);
     }
-
-    var hls_source = $("<source>", {
-        type: "application / x - mpegURL ",
-        "src": "hls/" + fixture.fixture_id + ".m3u8",
-    });
-
-    var dash_source = $("<source>", {
-        type: "application/dash+xml",
-        "src": "dash/" + fixture.fixture_id + ".mpd",
-    });
-
-    $(".my_video_1").html(hls_source);
-    $(".my_video_1").append(dash_source);
 }
