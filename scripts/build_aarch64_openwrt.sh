@@ -17,4 +17,4 @@ export PATH=/opt/toolchains/crosstools-aarch64-gcc-5.3-linux-4.1-glibc-2.22-binu
 
 install_rust
 aarch64-linux-gcc -v
-TARGET_CC=aarch64-linux-gcc cargo build --manifest-path http_server/Cargo.toml --release --target $RUST_TARGET -vv
+TARGET_CC=aarch64-linux-gcc cargo build --release --target $RUST_TARGET

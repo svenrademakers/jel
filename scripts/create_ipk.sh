@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
-package_name=$(cargo get --root http_server -n)
-authors=$(cargo get --root http_server -a)
-description=$(cargo get --root http_server -d)
-version=$(cargo get --root http_server version)
+package_name=$(cargo get -n)
+authors=$(cargo get -a)
+description=$(cargo get -d)
+version=$(cargo get version)
 architecture="aarch64-3.10"
 install_prefix="opt/sbin"
 www_install_prefix="opt/share/ronaldo_www"

@@ -29,8 +29,8 @@ jobs:
         run: |
           cargo install cargo-get &&\
           git clone --depth 1 https://git.yoctoproject.org/opkg-utils &&\
-          cd ./opkg-utils && sudo make install && cd .. &&\
-          RUST_OUT=http_server/target/$RUST_TARGET/release \
+          cd ./opkg-utils && sudo make install &&\
+          RUST_OUT=target/$RUST_TARGET/release \
           IPK_DIR=ronaldos_package \
           REPOSITORY_DIR=ronaldos_repository \
           GROUP=root \
@@ -42,8 +42,8 @@ jobs:
         with:
           name: ronaldos_repository
           path: |
-            http_server/target/*/release/build/*/output
-            http_server/target/*/build/*/output
+            target/*/release/build/*/output
+            target/*/build/*/output
       - name: updating package index
         uses: appleboy/scp-action@master
         with:
