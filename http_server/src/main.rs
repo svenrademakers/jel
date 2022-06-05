@@ -32,7 +32,9 @@ async fn main() -> io::Result<()> {
 
     if let Err(e) = run_server(
         service_context,
-        format!("").parse().unwrap(),
+        format!("{}:{}", config.host(), config.port())
+            .parse()
+            .unwrap(),
         config.hostname(),
         tls_cfg.ok(),
     )

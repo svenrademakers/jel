@@ -8,6 +8,19 @@ architecture="aarch64-3.10"
 install_prefix="opt/sbin"
 www_install_prefix="opt/share/ronaldo_www"
 
+function create_postinst() {
+    echo "#!/bin/sh
+systemctl daemon-reload
+systemctl enable $package_name.service
+" > "$IPK_DIR/CONTROL/postinst"
+}
+
+function create_prerm() {
+    echo "#!/bin/sh
+systemctl disable $package_name.service
+" >  "$IPK_DIR/CONTROL/prerm"
+}
+
 function create_control_file() {
     mkdir -p "$IPK_DIR/CONTROL"
     echo "Package: $package_name
@@ -18,21 +31,23 @@ Description: $description
 Priority: optional
 Installed-Size: $(du -s $IPK_DIR/DATA | awk '{print $1; exit}')
 " > "$IPK_DIR/CONTROL/control"
+    
+    create_postinst
+    create_prerm
 }
 
-function create_postinst() {
-    echo "#!/bin/sh
-/$install_prefix/$package_name &
-" > "$IPK_DIR/CONTROL/postinst"
-}
+function create_systemd_file() {
+    systemd_file="$IPK_DIR/DATA/etc/systemd/system/$package_name.service"
+    mkdir -p $systemd_file
+    echo "[Unit]
+Description=$description
 
-function create_prerm() {
-    echo "#!/bin/sh
-pid=\$(pidof "$package_name")
-if [[ \$pid ]]; then
-    kill \$pid
-fi
-" >  "$IPK_DIR/CONTROL/prerm"
+[Service]
+ExecStart=$package_name
+Restart=always
+
+[Install]
+WantedBy=multi-user.target" > $systemd_file
 }
 
 function package_data() {
@@ -45,9 +60,13 @@ function package_data() {
 
     www_install_path="$IPK_DIR/DATA/$www_install_prefix"   
     www_source="http_server/www/."
+
     echo "copying $www_source to $www_install_path"
     mkdir -p "$www_install_path"
     cp -r "$www_source" "$www_install_path"
+
+    create_systemd_file
+    create_control_file
 }
 
 function create_ipk() {
@@ -77,9 +96,6 @@ function create_package_repository() {
 }
 
 package_data
-create_control_file
-create_postinst
-create_prerm
 chmod -R 755 "$IPK_DIR"
 chmod -R 744 "$IPK_DIR/DATA/$www_install_prefix"
 create_ipk

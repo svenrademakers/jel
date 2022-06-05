@@ -18,7 +18,9 @@
 <script type="text/javascript">
     $("#sign_in").click(function () {
         $.post("dologin", { username: $("#usernametb").val(), password: $("#passwordtb").val() }).done(function (data) {
-            window.location.assign("https://www.svenrademakers.com/");
+            window.location.assign("/");
+        }).fail(function () {
+            alert("username or password not correct!");
         });
     });
 

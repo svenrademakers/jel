@@ -9,7 +9,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Server,
 };
-use log::{debug, info};
+use log::{debug, info, trace};
 use service::RequestHandler;
 use std::{net::SocketAddr, sync::Arc};
 use tokio_rustls::rustls::ServerConfig;
@@ -19,7 +19,7 @@ use crate::tls_stream::TlsAcceptor;
 macro_rules! make_service {
     ($service_context: ident) => {
         make_service_fn(|_| {
-            debug!("handle client");
+            trace!("handle client");
             let context = $service_context.clone();
             async {
                 let service = service_fn(move |request| {
@@ -46,9 +46,9 @@ where
     }
     info!("listening on interface {}", addres);
 
-    let incoming = AddrIncoming::bind(&addres).unwrap();
     let result;
     if let Some(cfg) = tls_cfg {
+        let incoming = AddrIncoming::bind(&addres).unwrap();
         let make_service = make_service!(service_context);
         let server = Server::builder(TlsAcceptor::new(Arc::new(cfg), incoming)).serve(make_service);
         let mut redirect = addres;

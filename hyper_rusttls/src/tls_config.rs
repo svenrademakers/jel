@@ -47,8 +47,11 @@ pub fn load_private_key(filename: &std::path::Path) -> io::Result<rustls::Privat
 
     let keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
         .map_err(|e| error(format!("failed to load private key {}", e)))?;
-    if keys.len() != 1 {
-        warn!("key lenght != 1. {:?}", keys);
+    if keys.len() == 0 {
+        info!("falling back on rsa key reader");
+        let rsa_keys = rustls_pemfile::rsa_private_keys(&mut reader)
+            .map_err(|e| error(format!("failed to load private key {}", e)))?;
+        return Ok(rustls::PrivateKey(rsa_keys[0].clone()));
     }
 
     Ok(rustls::PrivateKey(keys[0].clone()))

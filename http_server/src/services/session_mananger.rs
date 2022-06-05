@@ -3,7 +3,7 @@ use chrono::Duration;
 use http::HeaderMap;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
-use log::debug;
+use log::{debug, trace};
 use std::{fmt::Display, ops::Add};
 const SESSION_ID_KEY: &str = "Session_id";
 
@@ -21,6 +21,7 @@ impl SessionMananger {
             "password=",
             env!("PASSWORD")
         );
+        debug!("raw session id: {}", SESSION_ID);
         let encoded = base64::encode_config(SESSION_ID, base64::URL_SAFE);
         debug!("session cookie: {}", &encoded);
 
@@ -88,7 +89,7 @@ impl SessionMananger {
     fn create_session(&self, data: &[u8]) -> Option<String> {
         let utf8_body = std::str::from_utf8(data).unwrap();
         let encoded = base64::encode_config(utf8_body, base64::URL_SAFE);
-
+        debug!("encoded session: {}", encoded);
         if encoded == self.encoded {
             return Some(encoded);
         }
@@ -131,7 +132,10 @@ fn redirect_ok_response(session: &str) -> http::Response<Body> {
     http::Response::builder()
         .header(
             http::header::SET_COOKIE,
-            format!("{}={}; Secure; HttpOnly; SameSite=Strict", SESSION_ID_KEY, session),
+            format!(
+                "{}={}; Secure; HttpOnly; SameSite=Strict",
+                SESSION_ID_KEY, session
+            ),
         )
         .header(http::header::LOCATION, "/index.html")
         .header(http::header::EXPIRES, expiration.to_rfc2822())
