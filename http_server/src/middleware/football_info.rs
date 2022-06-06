@@ -16,4 +16,5 @@ pub struct Fixture {
 #[async_trait]
 pub trait FootballInfo: Send + Sync + 'static {
     async fn match_info(fixture_id: u32) -> Option<Fixture>;
+    async fn fixtures(season: &str) -> Vec<Fixture>;
 }
