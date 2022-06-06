@@ -84,7 +84,7 @@ function load_schedule_table(x) {
         output += "<td>" + match.score +
             "</td>";
         if (has_watch(match.fixture_id)) {
-            output += "<td><button type=\"button\" onclick=\"set_current_fixture(new Match(" + match.fixture_id + "))\" class=\"btn btn-outline-primary\">Watch</button></td>";
+            output += "<td><button type=\"button\" onclick=\"set_current_fixture(" + match.fixture_id + ")\" class=\"btn btn-outline-primary\">Watch</button></td>";
         }
         output += "</tr>";
     }
@@ -134,5 +134,15 @@ function set_current_fixture(match) {
 
         $(".video_player").html(hls_source);
         $(".video_player").append(dash_source);
+    } else {
+        // countdown!
+        $("#current_title").append("<span id=\"countdown\" class=\"float-right\"> </span>");
+        $('#countdown').countdown(start, function (event) {
+            $(this).html(event.strftime('\t%D days %H:%M:%S'));
+        });
     }
+}
+
+function start_countdown(match) {
+
 }
