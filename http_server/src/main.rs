@@ -31,7 +31,7 @@ async fn main() -> io::Result<()> {
     service_context.append_service(SessionMananger::new());
 
     if let Err(e) = run_server(
-        service_context,
+        Arc::new(service_context),
         format!("{}:{}", config.host(), config.port())
             .parse()
             .unwrap(),
