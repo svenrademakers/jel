@@ -24,7 +24,15 @@ where
         &self,
         request: http::Request<hyper::Body>,
     ) -> std::io::Result<http::Response<hyper::Body>> {
-        let string = serde_json::to_string(&self.recordings.get_all().await)?;
+        let re = Regex::new(".*[0-9]+.*")?;
+        for stream in recordings.get_all().await {
+           if let Some(fixture) = re.find(&stream.url.file_stem)
+               .map(Regex::Match::as_str)
+               .and_then(|s| self.football_info.fixture(s)) {
+                   stream
+           }
+        }
+      //  let string = serde_json::to_string(&self.recordings.get_all().await)?;
 
         Ok(http::Response::builder()
             .status(http::StatusCode::OK)

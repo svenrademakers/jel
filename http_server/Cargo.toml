@@ -22,3 +22,4 @@ base64="*"
 serde_yaml="*"
 hyper_rusttls = { path= "../hyper_rusttls" }
 chrono = { version = "*", features = ["serde"] }
+regex = "*"
