@@ -10,14 +10,19 @@ www_install_prefix="opt/share/ronaldo_www"
 
 function create_postinst() {
     echo "#!/bin/sh
-systemctl daemon-reload
-systemctl enable $package_name.service
+ronaldos-webserver &
+disown  -h  %1
 " > "$IPK_DIR/CONTROL/postinst"
 }
 
 function create_prerm() {
     echo "#!/bin/sh
-systemctl disable $package_name.service
+
+pid=\$(pidof "$package_name")
+ if [[ \$pid ]]; then
+     kill \$pid
+ fi
+
 " >  "$IPK_DIR/CONTROL/prerm"
 }
 
