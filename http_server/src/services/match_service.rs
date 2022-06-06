@@ -19,8 +19,6 @@ pub struct MatchService {
 #[async_trait]
 impl RequestHandler for MatchService {
     async fn invoke(&self, request: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
-        if let Some("recordings") = request.uri().query() {}
-
         let data = self.get_matches_slice().await;
         Ok(http::Response::builder()
             .status(http::StatusCode::OK)

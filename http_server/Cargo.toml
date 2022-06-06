@@ -11,7 +11,6 @@ tokio = { version = "*", features = ["net", "fs", "rt", "rt-multi-thread", "macr
 bytes = "*"
 async-trait = "*"
 http = "*"
-chrono = "*"
 log = "*"
 hyper = {version = "*", features = ["full", "tcp"]}
 futures-util = "*"
@@ -22,3 +21,4 @@ once_cell = "*"
 base64="*"
 serde_yaml="*"
 hyper_rusttls = { path= "../hyper_rusttls" }
+chrono = { version = "*", features = ["serde"] }
