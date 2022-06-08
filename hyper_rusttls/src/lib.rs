@@ -13,7 +13,6 @@ use log::{debug, info, trace};
 use service::RequestHandler;
 use std::{net::SocketAddr, sync::Arc};
 use tokio_rustls::rustls::ServerConfig;
-use std::sync::Arc;
 use crate::tls_stream::TlsAcceptor;
 
 macro_rules! make_service {
