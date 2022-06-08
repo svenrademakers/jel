@@ -11,6 +11,7 @@ use hyper_rusttls::tls_config::load_server_config;
 use log::*;
 use logger::init_log;
 use std::io;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
