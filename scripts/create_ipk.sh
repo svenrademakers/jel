@@ -10,8 +10,7 @@ www_install_prefix="opt/share/ronaldo_www"
 
 function create_postinst() {
     echo "#!/bin/sh
-ronaldos-webserver &
-disown  -h  %1
+($package_name >/dev/null 2>&1 )&
 " > "$IPK_DIR/CONTROL/postinst"
 }
 
