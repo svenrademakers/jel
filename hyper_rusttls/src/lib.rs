@@ -13,7 +13,7 @@ use log::{debug, info, trace};
 use service::RequestHandler;
 use std::{net::SocketAddr, sync::Arc};
 use tokio_rustls::rustls::ServerConfig;
-
+use std::sync::Arc;
 use crate::tls_stream::TlsAcceptor;
 
 macro_rules! make_service {
@@ -33,7 +33,7 @@ macro_rules! make_service {
 }
 
 pub async fn run_server<T>(
-    service_context: T,
+    service_context: Arc<T>,
     addres: SocketAddr,
     hostname: &str,
     tls_cfg: Option<ServerConfig>,
