@@ -50,7 +50,7 @@ async fn main() -> io::Result<()> {
         .unwrap();
     let tls_cfg = load_server_config(&config.certificates(), &config.private_key());
 
-    if let Err(e) = run_server(service_context, address, tls_cfg.ok()).await {
+    if let Err(e) = run_server(Arc::new(service_context), address, tls_cfg.ok()).await {
         error!("error running server: {}", e);
     }
 
