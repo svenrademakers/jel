@@ -3,7 +3,7 @@ use chrono::Duration;
 use http::HeaderMap;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
-use log::{debug, trace};
+use log::debug;
 use std::{fmt::Display, ops::Add};
 const SESSION_ID_KEY: &str = "Session_id";
 

@@ -93,7 +93,7 @@ impl HttpServer {
 
     pub fn append_service<T>(&mut self, service: T)
     where
-        T: RequestHandler,
+        T: 'static + RequestHandler,
     {
         self.services.insert(T::path(), Arc::new(service));
     }

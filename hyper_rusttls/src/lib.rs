@@ -4,6 +4,7 @@ pub mod tls_client_stream;
 pub mod tls_config;
 pub mod tls_stream;
 
+use http::uri::Scheme;
 use hyper::{
     server::conn::AddrIncoming,
     service::{make_service_fn, service_fn},
@@ -17,10 +18,10 @@ use crate::tls_stream::TlsAcceptor;
 
 macro_rules! make_service {
     ($service_context: ident) => {
-        make_service_fn(|_| {
+        make_service_fn(move |_| {
             trace!("handle client");
             let context = $service_context.clone();
-            async {
+            async move {
                 let service = service_fn(move |request| {
                     let ctx = context.clone();
                     async move { ctx.invoke(request).await }
@@ -34,11 +35,10 @@ macro_rules! make_service {
 pub async fn run_server<T>(
     service_context: Arc<T>,
     addres: SocketAddr,
-    hostname: &str,
     tls_cfg: Option<ServerConfig>,
 ) -> Result<(), hyper::Error>
 where
-    T: RequestHandler + Send + Clone,
+    T: 'static + RequestHandler + Send + Sync + Clone,
 {
     if tls_cfg.is_some() && addres.port() == 80 {
         panic!("cannot use port 80 for tls. its reserved for redirecting http traffic");
@@ -48,11 +48,12 @@ where
     let result;
     if let Some(cfg) = tls_cfg {
         let incoming = AddrIncoming::bind(&addres).unwrap();
-        let make_service = make_service!(service_context);
+        let q = service_context;
+        let make_service = make_service!(q);
         let server = Server::builder(TlsAcceptor::new(Arc::new(cfg), incoming)).serve(make_service);
         let mut redirect = addres;
         redirect.set_port(80);
-        let redirect_server = redirect_server(hostname, redirect);
+        let redirect_server = redirect_server(redirect);
         result = tokio::select! {
             res = server => res,
             res = redirect_server => res,
@@ -65,20 +66,21 @@ where
     result
 }
 
-async fn redirect_server(hostname: &str, addres: SocketAddr) -> Result<(), hyper::Error> {
+async fn redirect_server(addres: SocketAddr) -> Result<(), hyper::Error> {
     let make_svc = make_service_fn(|_conn| {
-        let redirect_location = format!("https://www.{}", hostname);
         let service = service_fn(move |req| {
-            let location = redirect_location.clone();
+            let mut parts = req.uri().clone().into_parts();
+            parts.scheme = Some(Scheme::HTTPS);
+            let location = http::Uri::from_parts(parts).unwrap();
             async move {
                 debug!("redirecting {} to {}", req.uri(), &location);
                 http::Response::builder()
                     .status(http::StatusCode::MOVED_PERMANENTLY)
-                    .header("Location", location)
+                    .header("Location", location.to_string())
                     .body(Body::empty())
             }
         });
-        async { Ok::<_, std::io::Error>(service) }
+        async move { Ok::<_, std::io::Error>(service) }
     });
 
     let server = Server::bind(&addres).serve(make_svc);

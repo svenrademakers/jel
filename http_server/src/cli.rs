@@ -53,8 +53,6 @@ config_definitions!(
     80,
     host: String,
     "0.0.0.0".to_string(),
-    hostname: String,
-    "localhost".to_string(),
     private_key: PathBuf,
     PathBuf::from("../test_certificates/server.key"),
     certificates: PathBuf,
