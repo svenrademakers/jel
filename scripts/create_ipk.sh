@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
-package_name=$(cargo get --root http_server -n)
-authors=$(cargo get --root http_server -a)
-description=$(cargo get --root http_server -d)
-version=$(cargo get --root http_server version)
+package_name=$(cargo get --root ronaldos_website -n)
+authors=$(cargo get --root ronaldos_website -a)
+description=$(cargo get --root ronaldos_website -d)
+version=$(cargo get --root ronaldos_website version)
 architecture="aarch64-3.10"
 install_prefix="opt/sbin"
-www_install_prefix="opt/share/ronaldo_www"
+www_install_prefix="opt/share/$package_name"
 
 function create_postinst() {
     echo "#!/bin/sh
@@ -40,20 +40,6 @@ Installed-Size: $(du -s $IPK_DIR/DATA | awk '{print $1; exit}')
     create_prerm
 }
 
-function create_systemd_file() {
-    systemd_file="$IPK_DIR/DATA/etc/systemd/system/$package_name.service"
-    mkdir -p "$(dirname $systemd_file)"
-    echo "[Unit]
-Description=$description
-
-[Service]
-ExecStart=$package_name
-Restart=always
-
-[Install]
-WantedBy=multi-user.target" > $systemd_file
-}
-
 function package_data() {
     package_binary="$RUST_OUT/$package_name"
     install_dir="$IPK_DIR/DATA/$install_prefix"
@@ -63,13 +49,12 @@ function package_data() {
     cp "$package_binary" "$install_dir"
 
     www_install_path="$IPK_DIR/DATA/$www_install_prefix"   
-    www_source="http_server/www/."
+    www_source="ronaldos_website/www/."
 
     echo "copying $www_source to $www_install_path"
     mkdir -p "$www_install_path"
     cp -r "$www_source" "$www_install_path"
 
-    create_systemd_file
     create_control_file
 }
 

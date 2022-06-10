@@ -3,12 +3,20 @@ use serde::Deserialize;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
+const CFG_PATH: &str = concat!(
+    "/opt/etc/",
+    env!("CARGO_PKG_NAME"),
+    "/",
+    env!("CARGO_PKG_NAME"),
+    ".cfg"
+);
+
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
 #[derive(Parser, Debug, Default)]
 #[clap(author, version, about, long_about = None)]
 pub struct Cli {
-    #[clap(short, long, default_value = "/opt/etc/ronaldo.cfg")]
+    #[clap(short, long, default_value = CFG_PATH )]
     pub config: PathBuf,
 }
 
@@ -48,7 +56,7 @@ macro_rules! config_definitions {
 
 config_definitions!(
     www_dir: PathBuf,
-    PathBuf::from("/opt/share/www"),
+    PathBuf::from(format!("/opt/share/{}/www", env!("CARGO_PKG_NAME"))),
     port: u16,
     80,
     host: String,
