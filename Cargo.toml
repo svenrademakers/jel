@@ -1,5 +1,6 @@
 [workspace]
 
-members = [ "ronaldos_website", 
+members = [
+    "ronaldos_website", 
     "hyper_rusttls"
 ]
