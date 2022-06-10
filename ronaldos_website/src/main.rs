@@ -4,9 +4,12 @@ mod logger;
 mod middleware;
 mod services;
 
-use crate::cli::Config;
+use crate::cli::{Cli, Config};
 use crate::middleware::{FootballApi, RecordingsOnDisk};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
+use clap::Parser;
+use cli::DeamonAction;
+use daemonize::Daemonize;
 use http_server::HttpServer;
 use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
@@ -17,13 +20,19 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let config = Config::load();
+    let cli = Cli::parse();
+    let config = Config::load(&cli);
     let log_level = match config.verbose() {
         true => log::Level::Debug,
         false => log::Level::Info,
     };
-
     init_log(log_level);
+
+    if let Some(option) = cli.daemon {
+        daemonize(option);
+        return Ok(());
+    }
+
     debug!("loaded:\n {:#?}", config);
 
     let mut recordings_root = config.www_dir().clone();
@@ -55,4 +64,17 @@ async fn main() -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn daemonize(option: DeamonAction) {
+    match option {
+        DeamonAction::START => {
+            Daemonize::new()
+                .pid_file("/opt/var/run/ronaldo.pid")
+                .start()
+                .unwrap();
+        }
+        DeamonAction::STOP => todo!(),
+        DeamonAction::RESTART => todo!(),
+    }
 }
