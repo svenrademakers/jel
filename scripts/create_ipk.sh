@@ -32,6 +32,7 @@ Version: $version
 Architecture: $architecture
 Maintainer: $authors
 Description: $description
+Depends: uacme
 Priority: optional
 Installed-Size: $(du -s $IPK_DIR/DATA | awk '{print $1; exit}')
 " > "$IPK_DIR/CONTROL/control"
