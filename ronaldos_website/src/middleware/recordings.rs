@@ -7,6 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{serde::ts_seconds, DateTime, Utc};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -45,9 +46,10 @@ pub struct RecordingsOnDisk {
 impl RecordingsOnDisk {
     pub async fn new(root: PathBuf) -> Self {
         if !root.exists() {
+            warn!("creating {}, does not exist", root.to_string_lossy());
             tokio::fs::create_dir_all(&root).await.unwrap();
-        }
-
+        } 
+        
         let recording_map = scan_filesystem(&root, Some(&root))
             .await
             .unwrap_or_default()

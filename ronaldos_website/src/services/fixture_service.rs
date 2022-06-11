@@ -25,7 +25,7 @@ impl FixtureService {
 
 #[async_trait]
 impl RequestHandler for FixtureService {
-    async fn invoke(&self, request: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
+    async fn invoke(&self, _: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
         let mut fixtures = self
             .football_info
             .fixtures("2022")

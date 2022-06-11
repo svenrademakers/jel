@@ -7,6 +7,7 @@ mod services;
 use crate::cli::{Cli, Config};
 use crate::middleware::{FootballApi, RecordingsOnDisk};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
+use async_recursion::async_recursion;
 use clap::Parser;
 use cli::DeamonAction;
 use daemonize::Daemonize;
@@ -15,7 +16,8 @@ use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
 use log::*;
 use logger::init_log;
-use std::io;
+use std::io::{self, Error, ErrorKind};
+use std::process::Command;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -29,8 +31,9 @@ async fn main() -> io::Result<()> {
     init_log(log_level);
 
     if let Some(option) = cli.daemon {
-        daemonize(option);
-        return Ok(());
+        return daemonize(option)
+            .await
+            .ok_or(Error::new(ErrorKind::Other, "fatal"));
     }
 
     debug!("loaded:\n {:#?}", config);
@@ -66,15 +69,22 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn daemonize(option: DeamonAction) {
+#[async_recursion]
+async fn daemonize(option: DeamonAction) -> Option<()> {
+    const PID: &str = "/opt/var/run/ronaldo.pid";
     match option {
-        DeamonAction::START => {
-            Daemonize::new()
-                .pid_file("/opt/var/run/ronaldo.pid")
-                .start()
-                .unwrap();
+        DeamonAction::START => Daemonize::new().pid_file(PID).start().ok(),
+        DeamonAction::STOP => {
+            let pid = tokio::fs::read(PID).await.ok()?;
+            Command::new("kill")
+                .arg(std::str::from_utf8(&pid).ok()?)
+                .output()
+                .ok()?;
+            Some(())
         }
-        DeamonAction::STOP => todo!(),
-        DeamonAction::RESTART => todo!(),
+        DeamonAction::RESTART => {
+            let _ = daemonize(DeamonAction::STOP).await;
+            daemonize(DeamonAction::START).await
+        }
     }
 }

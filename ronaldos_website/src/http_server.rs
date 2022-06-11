@@ -1,7 +1,7 @@
 use crate::services::SessionMananger;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
-use log::{debug, trace};
+use log::{debug, trace, info};
 use std::fmt::Display;
 use std::io;
 use std::{collections::HashMap, sync::Arc};
@@ -95,6 +95,7 @@ impl HttpServer {
     where
         T: 'static + RequestHandler,
     {
+        info!("added service {}", service);
         self.services.insert(T::path(), Arc::new(service));
     }
 }
