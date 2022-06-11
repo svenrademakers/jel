@@ -29,6 +29,12 @@ pub enum DeamonAction {
     RESTART,
 }
 
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct Login {
+    pub username: String,
+    pub password: String,
+}
+
 macro_rules! config_definitions {
     ($($name:ident : $type:ty, $default:expr),+) => {
         #[derive(Deserialize, Debug, Default)]
@@ -62,9 +68,11 @@ macro_rules! config_definitions {
     };
 }
 
+const WWW_DEFAULT: &str = concat!("/opt/share/", env!("CARGO_PKG_NAME"));
+
 config_definitions!(
     www_dir: PathBuf,
-    PathBuf::from(format!("/opt/share/{}/www", env!("CARGO_PKG_NAME"))),
+    PathBuf::from(format!("{}/www", WWW_DEFAULT)),
     port: u16,
     80,
     host: String,
@@ -76,5 +84,9 @@ config_definitions!(
     verbose: bool,
     false,
     api_key: String,
-    String::new()
+    String::new(),
+    video_dir: PathBuf,
+    PathBuf::from(format!("{}/videos", WWW_DEFAULT)),
+    login: Login,
+    Default::default()
 );

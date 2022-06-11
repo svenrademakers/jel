@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::info;
 use std::{fs, io, path::Path};
 use tokio_rustls::rustls;
 

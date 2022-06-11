@@ -26,6 +26,7 @@ pub trait FootballInfo: 'static + Send + Sync {
     async fn fixtures(&self, season: &str) -> Vec<Fixture>;
 }
 
+#[allow(dead_code)]
 pub struct FootballApi {
     data: RwLock<HashMap<String, Fixture>>,
     url: http::uri::Uri,
