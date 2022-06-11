@@ -6,22 +6,19 @@ description=$(cargo get --root ronaldos_website -d)
 version=$(cargo get --root ronaldos_website version)
 architecture="aarch64-3.10"
 install_prefix="opt/sbin"
-www_install_prefix="opt/share/$package_name"
+www_install_prefix="opt/share/$package_name/www"
 
 function create_postinst() {
     echo "#!/bin/sh
-($package_name >/dev/null 2>&1 )&
+    echo \"starting $package_name\"
+    $package_name -d start
 " > "$IPK_DIR/CONTROL/postinst"
 }
 
 function create_prerm() {
     echo "#!/bin/sh
-
-pid=\$(pidof "$package_name")
- if [[ \$pid ]]; then
-     kill \$pid
- fi
-
+    echo \"stopping $package_name\"
+    $package_name -d stop
 " >  "$IPK_DIR/CONTROL/prerm"
 }
 

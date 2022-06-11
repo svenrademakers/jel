@@ -5,6 +5,8 @@ use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
 use log::debug;
 use std::{fmt::Display, ops::Add};
+
+use crate::cli::Login;
 const SESSION_ID_KEY: &str = "Session_id";
 
 #[derive(Debug, Clone)]
@@ -13,18 +15,11 @@ pub struct SessionMananger {
 }
 
 impl SessionMananger {
-    pub fn new() -> Self {
-        const SESSION_ID: &str = concat!(
-            "username=",
-            env!("USERNAME"),
-            "&",
-            "password=",
-            env!("PASSWORD")
-        );
-        debug!("raw session id: {}", SESSION_ID);
-        let encoded = base64::encode_config(SESSION_ID, base64::URL_SAFE);
+    pub fn new(login: &Login) -> Self {
+        let session_id: String = format!("username={}&password={}", login.username, login.password);
+        debug!("raw session id: {}", session_id);
+        let encoded = base64::encode_config(session_id, base64::URL_SAFE);
         debug!("session cookie: {}", &encoded);
-
         SessionMananger { encoded }
     }
 

@@ -7,6 +7,7 @@ struct GithubWebhook {}
 
 #[async_trait]
 impl RequestHandler for GithubWebhook {
+    #[allow(unused_variables)]
     async fn invoke(
         &self,
         request: http::Request<hyper::Body>,

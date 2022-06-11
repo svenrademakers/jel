@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{ArgEnum, Parser};
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -13,11 +13,26 @@ const CFG_PATH: &str = concat!(
 
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Default, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct Cli {
     #[clap(short, long, default_value = CFG_PATH )]
     pub config: PathBuf,
+    #[clap(short, arg_enum)]
+    pub daemon: Option<DeamonAction>,
+}
+
+#[derive(ArgEnum, Clone, Debug)]
+pub enum DeamonAction {
+    START,
+    STOP,
+    RESTART,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct Login {
+    pub username: String,
+    pub password: String,
 }
 
 macro_rules! config_definitions {
@@ -28,8 +43,7 @@ macro_rules! config_definitions {
         }
 
         impl Config {
-            pub fn load() -> Self {
-                let cli = Cli::parse();
+            pub fn load(cli: &Cli) -> Self {
                 let mut cfg  = match std::fs::read_to_string(&cli.config){
                     Ok(raw) => {
                           serde_yaml::from_str::<Config>(&raw).unwrap()
@@ -54,9 +68,11 @@ macro_rules! config_definitions {
     };
 }
 
+const WWW_DEFAULT: &str = concat!("/opt/share/", env!("CARGO_PKG_NAME"));
+
 config_definitions!(
     www_dir: PathBuf,
-    PathBuf::from(format!("/opt/share/{}/www", env!("CARGO_PKG_NAME"))),
+    PathBuf::from(format!("{}/www", WWW_DEFAULT)),
     port: u16,
     80,
     host: String,
@@ -68,5 +84,9 @@ config_definitions!(
     verbose: bool,
     false,
     api_key: String,
-    String::new()
+    String::new(),
+    video_dir: PathBuf,
+    PathBuf::from(format!("{}/videos", WWW_DEFAULT)),
+    login: Login,
+    Default::default()
 );

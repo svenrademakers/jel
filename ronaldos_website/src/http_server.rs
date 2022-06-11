@@ -1,7 +1,8 @@
 use crate::services::SessionMananger;
+use http::{HeaderMap, Request};
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
-use log::{debug, trace};
+use log::{debug, info, trace};
 use std::fmt::Display;
 use std::io;
 use std::{collections::HashMap, sync::Arc};
@@ -9,27 +10,18 @@ use std::{collections::HashMap, sync::Arc};
 #[derive(Clone)]
 pub struct HttpServer {
     services: HashMap<&'static str, Arc<dyn RequestHandler>>,
-    session_manager: SessionMananger,
+    session_manager: Option<Arc<SessionMananger>>,
 }
 
 #[async_trait::async_trait]
 impl RequestHandler for HttpServer {
     async fn invoke(&self, request: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
-        let extra_headers;
-        match self.session_manager.has_permission(&request).await {
-            Err(denied_response) => {
-                debug!(
-                    "{} for {} {}",
-                    denied_response.status(),
-                    request.uri().path(),
-                    request.method()
-                );
-                trace!("request headers: {:?}", request.headers());
-                return Ok(denied_response);
-            }
-            Ok(headers) => extra_headers = headers,
-        }
-
+        let permission = self.verify_permissions(&request).await;
+        let extra_headers = match permission {
+            Ok(headers) => headers,
+            Err(response) => return Ok(response),
+        };
+        
         let handler = self
             .services
             .get(request.uri().path())
@@ -77,25 +69,63 @@ impl RequestHandler for HttpServer {
 }
 
 impl HttpServer {
-    pub async fn new(www_dir: &std::path::Path) -> io::Result<Self> {
+    pub async fn new(
+        www_dir: &std::path::Path,
+        session_manager: Option<SessionMananger>,
+    ) -> io::Result<Self> {
         if !www_dir.exists() {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("{} does not exists", www_dir.to_string_lossy()),
             ));
         }
-
-        Ok(HttpServer {
+        let session_manager = session_manager.map(Arc::new);
+        let mut server = HttpServer {
             services: HashMap::new(),
-            session_manager: SessionMananger::new(),
-        })
+            session_manager: session_manager.clone(),
+        };
+
+        if let Some(sm) = session_manager {
+            server.services.insert(SessionMananger::path(), sm);
+        }
+
+        Ok(server)
     }
 
     pub fn append_service<T>(&mut self, service: T)
     where
         T: 'static + RequestHandler,
     {
+        info!("added service {}", service);
         self.services.insert(T::path(), Arc::new(service));
+    }
+
+    async fn verify_permissions(
+        &self,
+        request: &Request<Body>,
+    ) -> Result<Option<HeaderMap>, http::Response<Body>> {
+        if self.session_manager.is_some() {
+            match self
+                .session_manager
+                .as_ref()
+                .unwrap()
+                .has_permission(&request)
+                .await
+            {
+                Err(denied_response) => {
+                    debug!(
+                        "{} for {} {}",
+                        denied_response.status(),
+                        request.uri().path(),
+                        request.method()
+                    );
+                    trace!("request headers: {:?}", request.headers());
+                    return Err(denied_response);
+                }
+                Ok(headers) => return Ok(headers),
+            }
+        }
+        Ok(None)
     }
 }
 

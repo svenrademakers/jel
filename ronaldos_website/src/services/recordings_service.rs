@@ -21,7 +21,7 @@ where
 {
     async fn invoke(
         &self,
-        request: http::Request<hyper::Body>,
+        _: http::Request<hyper::Body>,
     ) -> std::io::Result<http::Response<hyper::Body>> {
         as_json_response(self.recordings.get_all().await)
     }

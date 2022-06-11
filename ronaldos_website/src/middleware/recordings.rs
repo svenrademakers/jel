@@ -7,6 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{serde::ts_seconds, DateTime, Utc};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -36,6 +37,7 @@ pub trait Recordings: Send + Sync {
 pub type UpdateCallback = dyn Fn((Source, bool)) -> bool + Send + Sync;
 type ObserverList = RwLock<Vec<Arc<UpdateCallback>>>;
 
+#[allow(dead_code)]
 pub struct RecordingsOnDisk {
     recording_map: RwLock<HashMap<PathBuf, Source>>,
     root: PathBuf,
@@ -43,8 +45,9 @@ pub struct RecordingsOnDisk {
 }
 
 impl RecordingsOnDisk {
-    pub async fn new(root: PathBuf) -> Self {
+    pub async fn new(root: &Path) -> Self {
         if !root.exists() {
+            warn!("creating {}, does not exist", root.to_string_lossy());
             tokio::fs::create_dir_all(&root).await.unwrap();
         }
 
@@ -57,7 +60,7 @@ impl RecordingsOnDisk {
 
         RecordingsOnDisk {
             recording_map: RwLock::new(recording_map),
-            root,
+            root: root.to_path_buf(),
             observers: RwLock::new(Vec::new()),
         }
     }
@@ -69,6 +72,7 @@ impl Recordings for RecordingsOnDisk {
         self.recording_map.read().await.values().cloned().collect()
     }
 
+    #[allow(unused_variables)]
     async fn register<T>(&self, cb: &T)
     where
         T: Fn((Source, bool)) -> bool + Send + Sync,
