@@ -88,5 +88,7 @@ config_definitions!(
     video_dir: PathBuf,
     PathBuf::from(format!("{}/videos", WWW_DEFAULT)),
     login: Login,
-    Default::default()
+    Default::default(),
+    hostname: String,
+    String::new()
 );

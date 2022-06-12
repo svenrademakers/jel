@@ -92,7 +92,7 @@ async fn scan_filesystem(root: &Path, path: Option<&Path>) -> Option<Vec<Source>
         let file = PathBuf::from(entry.file_name());
         let typ = match file.extension().and_then(OsStr::to_str) {
             Some("m3u8") => StreamingType::HLS,
-            Some("dash") => StreamingType::DASH,
+            Some("dash" | "mpd") => StreamingType::DASH,
             _ => continue,
         };
 

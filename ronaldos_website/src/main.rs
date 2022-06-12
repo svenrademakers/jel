@@ -57,7 +57,7 @@ async fn application_main(config: Config) -> Result<(), Error> {
         .parse()
         .unwrap();
     let tls_cfg = load_server_config(&config.certificates(), &config.private_key());
-    if let Err(e) = run_server(Arc::new(service_context), address, tls_cfg.ok()).await {
+    if let Err(e) = run_server(Arc::new(service_context), address, config.hostname(),tls_cfg.ok()).await {
         error!("error running server: {}", e);
     }
     Ok(())
@@ -68,16 +68,13 @@ fn daemonize(option: DeamonAction) -> Option<()> {
     const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
     std::fs::create_dir_all(STDOUT).unwrap();
 
-    let stdout = std::fs::File::create(format!("{}/daemon.out", STDOUT)).unwrap();
+    //let stdout = std::fs::File::create(format!("{}/daemon.out", STDOUT)).unwrap();
     let stderr = std::fs::File::create(format!("{}/daemon.err", STDOUT)).unwrap();
 
     match option {
         DeamonAction::START => Daemonize::new()
             .pid_file(PID)
-            // .user("admin")
-            // .group("root")
-            // .chown_pid_file(true)
-            .stdout(stdout)
+           // .stdout(stdout)
             .stderr(stderr)
             .start()
             .ok(),

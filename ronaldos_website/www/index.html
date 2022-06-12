@@ -4,7 +4,7 @@
 
 <h4 id="current_title" class="mb-3"></h4>
 <div class="row embed-responsive embed-responsive-16by9">
-    <video-js id="video_player" class="vjs-default-skin embed-responsive-item" controls preload="auto">
+    <video-js id="video_player"  data-setup='{"liveui": true}' class="vjs-default-skin embed-responsive-item" controls preload="auto">
         <source src="http://live.svenrademakers.com:8080/hls/live.m3u8" type="application/x-mpegURL">
         <source src="http://live.svenrademakers.com:8080/dash/live.mpd" type='application/dash+xml'>
     </video-js>

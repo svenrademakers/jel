@@ -111,36 +111,36 @@ function has_watch(fixt_id) {
 function set_current_fixture(match) {
     let fixture = new Match(match);
     $("#current_title").text(fixture.home + " - " + fixture.away);
+    var video = videojs("video_player");
+    video.src(url);
 
-    let start = new Date(0);
-    start.setUTCSeconds(fixtures[match]["timestamp"]);
-    start.setMinutes(start.getMinutes() - 15);
+    // let start = new Date(0);
+    // start.setUTCSeconds(fixtures[match]["timestamp"]);
+    // start.setMinutes(start.getMinutes() - 15);
 
-    let end = start;
-    end.setHours(end.getHours() + 2);
-    let now = new Date();
+    // let end = start;
+    // end.setHours(end.getHours() + 2);
+    // let now = new Date();
 
-    if (now >= start && now < end) {
-        $("#current_title").append(" <span class=\"badge badge-danger\">Live</span>");
-        var hls_source = $("<source>", {
-            type: "application / x - mpegURL ",
-            "src": "hls/" + fixture.fixture_id + ".m3u8",
-        });
+    // if (now >= start && now < end) {
+    //     $("#current_title").append(" <span class=\"badge badge-danger\">Live</span>");
+    // video.src( {
+    //     type: "application/x-mpegURL",
+    //     src: "http://live.svenrademakers.com:8080/hls/" + fixture.fixture_id + ".m3u8",
+    // });
 
-        var dash_source = $("<source>", {
-            type: "application/dash+xml",
-            "src": "dash/" + fixture.fixture_id + ".mpd",
-        });
+    // var dash_source = $("<source>", {
+    //     type: "application/dash+xml",
+    //     "src": "http://live.svenrademakers.com:8080/dash/" + fixture.fixture_id + ".mpd",
+    // });
 
-        $(".video_player").html(hls_source);
-        $(".video_player").append(dash_source);
-    } else {
-        // countdown!
-        $("#current_title").append("<span id=\"countdown\" class=\"float-right\"> </span>");
-        $('#countdown').countdown(start, function (event) {
-            $(this).html(event.strftime('\t%D days %H:%M:%S'));
-        });
-    }
+    // } else {
+    //     // countdown!
+    //     $("#current_title").append("<span id=\"countdown\" class=\"float-right\"> </span>");
+    //     $('#countdown').countdown(start, function (event) {
+    //         $(this).html(event.strftime('\t%D days %H:%M:%S'));
+    //     });
+    // }
 }
 
 function start_countdown(match) {
