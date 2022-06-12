@@ -111,10 +111,7 @@ function has_watch(fixt_id) {
 function set_current_fixture(match) {
     let fixture = new Match(match);
     $("#current_title").text(fixture.home + " - " + fixture.away);
-    var video = videojs("video_player");
-    video.src(url);
-
-    // let start = new Date(0);
+      // let start = new Date(0);
     // start.setUTCSeconds(fixtures[match]["timestamp"]);
     // start.setMinutes(start.getMinutes() - 15);
 
