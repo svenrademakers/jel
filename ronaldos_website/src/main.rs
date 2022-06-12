@@ -74,7 +74,7 @@ fn daemonize(option: DeamonAction) -> Option<()> {
     match option {
         DeamonAction::START => Daemonize::new()
             .pid_file(PID)
-            .chown_pid(true)
+            //.chown_pid(true)
            // .stdout(stdout)
             .stderr(stderr)
             .start()
