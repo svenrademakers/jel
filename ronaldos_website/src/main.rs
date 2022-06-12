@@ -84,7 +84,7 @@ fn daemonize(option: DeamonAction) -> Option<()> {
                 .arg(std::str::from_utf8(&pid).ok()?)
                 .output()
                 .ok()?;
-            Some(())
+            None
         }
         DeamonAction::RESTART => {
             let _ = daemonize(DeamonAction::STOP);
