@@ -2,5 +2,6 @@
 
 members = [
     "ronaldos_website", 
-    "hyper_rusttls"
+    "hyper_rusttls",
+    "uacme_renew",
 ]

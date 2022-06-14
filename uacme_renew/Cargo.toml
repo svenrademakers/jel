@@ -1,0 +1,9 @@
+[package]
+name = "uacme-renew"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version="*", features = ["derive"] }
+daemonize = "*"
+serde_yaml="*"
