@@ -3,7 +3,7 @@ mod logger;
 mod middleware;
 mod services;
 
-use crate::middleware::{FootballApi, RecordingsOnDisk};
+use crate::middleware::{FootballApi, LocalStreamStore};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
 use clap::{ArgEnum, Parser};
 use daemonize::Daemonize;
@@ -55,7 +55,9 @@ fn main() -> io::Result<()> {
 
 async fn application_main(config: Config) -> Result<(), Error> {
     debug!("loaded:\n {:#?}", config);
-    let recordings_disk = Arc::new(RecordingsOnDisk::new(config.video_dir()).await);
+    let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
+    LocalStreamStore::run(&mut recordings_disk);
+    
     let football_api = Arc::new(
         FootballApi::new(
             "2022",
@@ -65,7 +67,11 @@ async fn application_main(config: Config) -> Result<(), Error> {
         )
         .await,
     );
-    let service_manager = Some(SessionMananger::new(config.login()));
+
+    let service_manager = match config.login().username.is_empty() {
+        false => Some(SessionMananger::new(config.login())),
+        true => None,
+    };
     let mut service_context = HttpServer::new(config.www_dir(), service_manager).await?;
     service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
     service_context.append_service(FileService::new(config.www_dir()).await?);
