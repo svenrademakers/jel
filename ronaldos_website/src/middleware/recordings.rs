@@ -59,7 +59,7 @@ impl RecordingsOnDisk {
             .collect();
 
         RecordingsOnDisk {
-            recording_map: RwLock::new(recording_map),
+            recording_map: RwLock::new(HashMap::new),
             root: root.to_path_buf(),
             observers: RwLock::new(Vec::new()),
         }
