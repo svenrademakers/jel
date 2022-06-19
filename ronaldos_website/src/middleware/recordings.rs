@@ -51,12 +51,12 @@ impl RecordingsOnDisk {
             tokio::fs::create_dir_all(&root).await.unwrap();
         }
 
-        let recording_map = scan_filesystem(&root, Some(&root))
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(|s| (s.url.clone(), s))
-            .collect();
+       // let recording_map = scan_filesystem(&root, Some(&root))
+       //     .await
+       //     .unwrap_or_default()
+       //     .into_iter()
+       //      .map(|s| (s.url.clone(), s))
+       //     .collect();
 
         RecordingsOnDisk {
             recording_map: RwLock::new(HashMap::new),
