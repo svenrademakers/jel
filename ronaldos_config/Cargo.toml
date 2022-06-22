@@ -7,5 +7,4 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "*", features = ["derive"] }
-clap = { version="*", features = ["derive"] }
 serde_yaml="*"

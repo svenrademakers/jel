@@ -5,19 +5,40 @@ mod services;
 
 use crate::middleware::{FootballApi, RecordingsOnDisk};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
+use clap::{ArgEnum, Parser};
 use daemonize::Daemonize;
 use http_server::HttpServer;
 use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
 use log::*;
 use logger::init_log;
-use ronaldos_config::{get_application_config, Config, DeamonAction};
+use ronaldos_config::{get_application_config, Config};
 use std::io::{self, Error, ErrorKind};
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
+/// CLI structure that loads the commandline arguments. These arguments will be
+/// serialized in this structure
+#[derive(Parser, Default, Debug)]
+#[clap(author, version, about, long_about = None)]
+pub struct Cli {
+    #[clap(short, long, default_value = ronaldos_config::CFG_PATH )]
+    pub config: PathBuf,
+    #[clap(short, arg_enum)]
+    pub daemon: Option<DeamonAction>,
+}
+
+#[derive(ArgEnum, Clone, Debug)]
+pub enum DeamonAction {
+    START,
+    STOP,
+    RESTART,
+}
+
 fn main() -> io::Result<()> {
-    let (config, cli) = get_application_config();
+    let cli = Cli::parse();
+    let config = get_application_config(&cli.config);
     let log_level = match config.verbose() {
         true => log::Level::Debug,
         false => log::Level::Info,

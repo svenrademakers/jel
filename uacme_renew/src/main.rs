@@ -1,3 +1,5 @@
+use clap::Parser;
+use daemonize::Daemonize;
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -5,44 +7,32 @@ use std::{
     time::Duration,
 };
 
-use clap::Parser;
-use daemonize::Daemonize;
-
 #[derive(Parser)]
 struct Args {
-    #[clap(short, long, default_value_t = 7)]
-    pub interval_days: u64,
-    #[clap(short, long)]
+    #[clap(short, long, default_value = ronaldos_config::CFG_PATH)]
     pub config: PathBuf,
     #[clap(short)]
     pub now: bool,
 }
 
 fn main() {
-    println!("Hello, world!");
-    let args = Args::parse();
-    let duration = Duration::from_secs(args.interval_days * 24 * 60 * 60);
+    let cli = Args::parse();
+    let config = ronaldos_config::get_application_config(&cli.config);
+    let duration = Duration::from_secs(config.interval_days() * 24 * 60 * 60);
 
-    if !args.config.exists() {
-        eprintln!("configuration file {:?} does not exist", args.config);
-        return;
-    }
-
-    let script_path: PathBuf = PathBuf::from("/opt/etc/ronaldos_webserver/uacme.sh");
+    let script_path: PathBuf = PathBuf::from("/opt/share/uacme/uacme.sh");
     if !script_path.exists() {
         eprintln!(
-            "cannot renew certificates. {} does not exist",
+            "{} does not exist. did you install the uacme package?",
             script_path.to_string_lossy()
         );
         return;
     }
 
-    let hostname =
-        get_hostname_from_config(&args.config).expect("need hostname in order to run acme test");
-    let host = format!("www.{}", hostname);
+    let host = format!("www.{}", config.hostname());
 
-    if args.now {
-        execute(&script_path, &host);
+    if cli.now {
+        execute(&script_path, &host, config.www_dir());
         return;
     }
 
@@ -51,13 +41,14 @@ fn main() {
     loop {
         println!("waking up in {:?}", duration);
         thread::sleep(duration);
-        execute(&script_path, &host);
+        execute(&script_path, &host, config.www_dir());
     }
 }
 
-fn execute(script_path: &PathBuf, host: &String) {
+fn execute(script_path: &Path, host: &String, www: &Path) {
+    let uacme_challenge_path = format!("UACME_CHALLENGE_PATH={}", www.to_string_lossy());
     let uacme_args = [
-        "UACME_CHALLENGE_PATH=/opt/share/ronaldos-website/www",
+        &uacme_challenge_path,
         "uacme",
         "-h",
         &script_path.to_string_lossy(),
@@ -100,16 +91,4 @@ fn daemonize() {
         .stderr(stderr)
         .start()
         .ok();
-}
-
-fn get_hostname_from_config(config: &Path) -> Option<String> {
-    let data = std::fs::read(config).ok()?;
-
-    if let Ok(serde_yaml::Value::Mapping(x)) = serde_yaml::to_value(&data) {
-        let key: serde_yaml::Value = serde_yaml::from_str("hostname").ok()?;
-        return x
-            .get(&key)
-            .and_then(|v| serde_yaml::from_value(v.clone()).ok());
-    }
-    None
 }

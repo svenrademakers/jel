@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ronaldos_config = { path="../ronaldos_config" }
 clap = { version="*", features = ["derive"] }
 daemonize = "*"
-serde_yaml="*"
+
