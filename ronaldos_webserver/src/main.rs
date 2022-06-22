@@ -1,27 +1,23 @@
-mod cli;
 mod http_server;
 mod logger;
 mod middleware;
 mod services;
 
-use crate::cli::{Cli, Config};
 use crate::middleware::{FootballApi, RecordingsOnDisk};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
-use clap::Parser;
-use cli::DeamonAction;
 use daemonize::Daemonize;
 use http_server::HttpServer;
 use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
 use log::*;
 use logger::init_log;
+use ronaldos_config::{get_application_config, Config, DeamonAction};
 use std::io::{self, Error, ErrorKind};
 use std::process::Command;
 use std::sync::Arc;
 
 fn main() -> io::Result<()> {
-    let cli = Cli::parse();
-    let config = Config::load(&cli);
+    let (config, cli) = get_application_config();
     let log_level = match config.verbose() {
         true => log::Level::Debug,
         false => log::Level::Info,

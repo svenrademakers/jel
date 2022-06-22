@@ -28,7 +28,7 @@ fn main() {
         return;
     }
 
-    let script_path: PathBuf = PathBuf::from("/opt/etc/ronaldos_website/uacme.sh");
+    let script_path: PathBuf = PathBuf::from("/opt/etc/ronaldos_webserver/uacme.sh");
     if !script_path.exists() {
         eprintln!(
             "cannot renew certificates. {} does not exist",
@@ -69,14 +69,14 @@ fn execute(script_path: &PathBuf, host: &String) {
             if o.status.success() {
                 println!(" renew certificates succeeded");
                 if !Command::new("/bin/bash")
-                    .arg("ronaldos_website")
+                    .arg("ronaldos_webserver")
                     .arg("-d")
                     .arg("restart")
                     .output()
                     .map(|o| o.status.success())
                     .unwrap_or_default()
                 {
-                    eprintln!("restart of ronaldos_website might not be successful");
+                    eprintln!("restart of ronaldos_webserver might not be successful");
                 }
             } else {
                 eprintln!("renew of certificates returned statuscode {}", o.status);

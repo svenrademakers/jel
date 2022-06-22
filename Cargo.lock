@@ -556,7 +556,6 @@ dependencies = [
  "base64",
  "bytes",
  "chrono",
- "clap",
  "daemonize",
  "futures-util",
  "http",
@@ -565,11 +564,21 @@ dependencies = [
  "log",
  "once_cell",
  "regex",
+ "ronaldos_config",
  "serde",
  "serde_json",
  "serde_yaml",
  "syslog",
  "tokio",
+]
+
+[[package]]
+name = "ronaldos_config"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_yaml",
 ]
 
 [[package]]

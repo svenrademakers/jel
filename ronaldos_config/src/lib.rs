@@ -3,13 +3,8 @@ use serde::Deserialize;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-const CFG_PATH: &str = concat!(
-    "/opt/etc/",
-    env!("CARGO_PKG_NAME"),
-    "/",
-    env!("CARGO_PKG_NAME"),
-    ".cfg"
-);
+const CFG_PATH: &str = concat!("/opt/etc/ronaldos-webserver/config.cfg");
+const WWW_DEFAULT: &str = concat!("/opt/share/ronaldos-webserver/www");
 
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
@@ -43,13 +38,13 @@ macro_rules! config_definitions {
         }
 
         impl Config {
-            pub fn load(cli: &Cli) -> Self {
-                let mut cfg  = match std::fs::read_to_string(&cli.config){
+            pub fn load<P: AsRef<std::path::Path>>(config_file : &P) -> Self {
+                let mut cfg  = match std::fs::read_to_string(config_file){
                     Ok(raw) => {
                           serde_yaml::from_str::<Config>(&raw).unwrap()
                     }
                     _ => {
-                        eprintln!("could not read config {}. defaulting config", cli.config.to_string_lossy());
+                        eprintln!("could not read config {}. defaulting config", config_file.as_ref().to_string_lossy());
                         Config::default()
                     }
                 };
@@ -67,8 +62,6 @@ macro_rules! config_definitions {
         }
     };
 }
-
-const WWW_DEFAULT: &str = concat!("/opt/share/", env!("CARGO_PKG_NAME"));
 
 config_definitions!(
     www_dir: PathBuf,
@@ -92,3 +85,8 @@ config_definitions!(
     hostname: String,
     String::new()
 );
+
+pub fn get_application_config() -> (Config, Cli) {
+    let cli = Cli::parse();
+    (Config::load(&cli.config), cli)
+}

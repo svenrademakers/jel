@@ -4,9 +4,9 @@ use http::HeaderMap;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
 use log::debug;
+use ronaldos_config::Login;
 use std::{fmt::Display, ops::Add};
 
-use crate::cli::Login;
 const SESSION_ID_KEY: &str = "Session_id";
 
 #[derive(Debug, Clone)]
