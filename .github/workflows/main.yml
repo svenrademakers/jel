@@ -27,15 +27,9 @@ jobs:
           asuswrt-merlin-build scripts/build_aarch64_openwrt.sh
       - name: archiving .ipk package and create index
         run: |
-          cargo install cargo-get &&\
           git clone --depth 1 https://git.yoctoproject.org/opkg-utils &&\
           cd ./opkg-utils && sudo make install && cd .. &&\
-          RUST_OUT=target/$RUST_TARGET/release \
-          IPK_DIR=ronaldos_package \
-          REPOSITORY_DIR=ronaldos_repository \
-          GROUP=root \
-          OWNER=admin \
-          scripts/create_ipk.sh
+          python3 scripts/create_ipk_packages.py ronaldos_repository
       - name: updating package index
         uses: appleboy/scp-action@master
         with:
