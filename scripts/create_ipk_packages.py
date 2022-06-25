@@ -10,7 +10,7 @@ args = parser.parse_args()
 
 os.makedirs(args.output, exist_ok=True)
 
-ronaldos_webserver = cargo_package("ronaldos_webserver")
+ronaldos_webserver = cargo_package("ronaldos-webserver")
 ronaldos_webserver.postinst(f"#!/bin/sh\n\
     logger \"starting {ronaldos_webserver.name}\"\n \
     {ronaldos_webserver.name} -d start")
