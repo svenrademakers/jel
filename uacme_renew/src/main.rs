@@ -1,6 +1,11 @@
+mod log;
+
+use ::log::{error, info};
 use clap::Parser;
 use daemonize::Daemonize;
+use ronaldos_config::get_webserver_pid;
 use std::{
+    fs::File,
     path::{Path, PathBuf},
     process::Command,
     thread,
@@ -16,13 +21,14 @@ struct Args {
 }
 
 fn main() {
+    log::init().unwrap();
     let cli = Args::parse();
     let config = ronaldos_config::get_application_config(&cli.config);
     let duration = Duration::from_secs(config.interval_days() * 24 * 60 * 60);
 
     let script_path: PathBuf = PathBuf::from("/opt/share/uacme/uacme.sh");
     if !script_path.exists() {
-        eprintln!(
+        error!(
             "{} does not exist. did you install the uacme package?",
             script_path.to_string_lossy()
         );
@@ -39,7 +45,7 @@ fn main() {
     daemonize();
 
     loop {
-        println!("waking up in {:?}", duration);
+        info!("waking up in {:?}", duration);
         thread::sleep(duration);
         execute(&script_path, &host, config.www_dir());
     }
@@ -55,26 +61,26 @@ fn execute(script_path: &Path, host: &String, www: &Path) {
         "issue",
         host,
     ];
+
+    if get_webserver_pid().is_none() {
+        if !webserver_command(false) {
+            error!("ronaldos_webserver must be running");
+        }
+    }
+
     match Command::new("/bin/bash").args(uacme_args).output() {
         Ok(o) => {
             if o.status.success() {
-                println!(" renew certificates succeeded");
-                if !Command::new("/bin/bash")
-                    .arg("ronaldos_webserver")
-                    .arg("-d")
-                    .arg("restart")
-                    .output()
-                    .map(|o| o.status.success())
-                    .unwrap_or_default()
-                {
-                    eprintln!("restart of ronaldos_webserver might not be successful");
+                info!("renew certificates succeeded");
+                if !webserver_command(true) {
+                    error!("restart of ronaldos_webserver might not be successful");
                 }
             } else {
-                eprintln!("renew of certificates returned statuscode {}", o.status);
+                error!("renew of certificates returned statuscode {}", o.status);
             }
         }
         Err(e) => {
-            eprintln!("eprintln executing uacme process {}", e);
+            error!("error executing uacme process {}", e);
         }
     }
 }
@@ -82,8 +88,9 @@ fn execute(script_path: &Path, host: &String, www: &Path) {
 fn daemonize() {
     const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
     const PID: &str = "/opt/var/run/ronaldo_uacme.pid";
-    let stdout = std::fs::File::create(format!("{}/daemon.out", STDOUT)).unwrap();
-    let stderr = std::fs::File::create(format!("{}/daemon.err", STDOUT)).unwrap();
+
+    let stdout = create_if_not_exists(format!("{}/daemon.out", STDOUT));
+    let stderr = create_if_not_exists(format!("{}/daemon.err", STDOUT));
     Daemonize::new()
         .pid_file(PID)
         //.chown_pid(true)
@@ -91,4 +98,28 @@ fn daemonize() {
         .stderr(stderr)
         .start()
         .ok();
+}
+
+fn webserver_command(restart: bool) -> bool {
+    let start = match restart {
+        true => "restart",
+        false => "start",
+    };
+
+    Command::new("/bin/bash")
+        .arg("ronaldos_webserver")
+        .arg("-d")
+        .arg(start)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or_default()
+}
+
+fn create_if_not_exists<P: AsRef<Path>>(path: P) -> File {
+    let path: &Path = path.as_ref();
+    let parent = path.parent().unwrap();
+    if !parent.exists() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::File::create(path).unwrap()
 }

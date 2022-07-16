@@ -89,7 +89,6 @@ async fn application_main(config: Config) -> Result<(), Error> {
 }
 
 fn daemonize(option: DeamonAction) -> Option<()> {
-    const PID: &str = "/opt/var/run/ronaldo.pid";
     const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
     std::fs::create_dir_all(STDOUT).unwrap();
 
@@ -98,14 +97,14 @@ fn daemonize(option: DeamonAction) -> Option<()> {
 
     match option {
         DeamonAction::START => Daemonize::new()
-            .pid_file(PID)
+            .pid_file(ronaldos_config::PID)
             //.chown_pid(true)
             // .stdout(stdout)
             .stderr(stderr)
             .start()
             .ok(),
         DeamonAction::STOP => {
-            let pid = std::fs::read(PID).ok()?;
+            let pid = std::fs::read(ronaldos_config::PID).ok()?;
             Command::new("/bin/bash")
                 .arg("kill")
                 .arg(std::str::from_utf8(&pid).ok()?)

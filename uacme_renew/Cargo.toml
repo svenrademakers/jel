@@ -9,4 +9,5 @@ description = "application that periodically executes an acme test and reloads r
 ronaldos_config = { path="../ronaldos_config" }
 clap = { version="*", features = ["derive"] }
 daemonize = "*"
+log = "*"
 

@@ -1,9 +1,11 @@
 use serde::Deserialize;
 use std::fmt::Debug;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub const WWW_DEFAULT: &str = concat!("/opt/share/ronaldos-webserver/www");
 pub const CFG_PATH: &str = concat!("/opt/etc/ronaldos-webserver/config.cfg");
+pub const PID: &str = "/opt/var/run/ronaldos-webserver.pid";
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct Login {
@@ -60,4 +62,13 @@ config_definitions!(
 
 pub fn get_application_config<P: AsRef<Path>>(config: &P) -> Config {
     Config::load(config)
+}
+
+pub fn get_webserver_pid() -> Option<u32> {
+    let mut buf = [0_u8; 33];
+
+    std::fs::File::open(PID)
+        .and_then(|mut f| f.read(&mut buf))
+        .ok()?;
+    std::str::from_utf8(&buf).ok()?.parse::<u32>().ok()
 }
