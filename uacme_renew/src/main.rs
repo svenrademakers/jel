@@ -2,10 +2,12 @@ mod log;
 
 use ::log::{error, info};
 use clap::Parser;
-use daemonize::Daemonize;
+use daemonize::{Daemonize, DaemonizeError};
 use ronaldos_config::get_webserver_pid;
 use std::{
+    error::Error,
     fs::File,
+    io,
     path::{Path, PathBuf},
     process::Command,
     thread,
@@ -20,8 +22,9 @@ struct Args {
     pub now: bool,
 }
 
-fn main() {
-    log::init().unwrap();
+fn main() -> Result<(), Box<dyn Error>> {
+    log::init()?;
+    info!("lets go");
     let cli = Args::parse();
     let config = ronaldos_config::get_application_config(&cli.config);
     let duration = Duration::from_secs(config.interval_days() * 24 * 60 * 60);
@@ -32,17 +35,20 @@ fn main() {
             "{} does not exist. did you install the uacme package?",
             script_path.to_string_lossy()
         );
-        return;
+        return Err(Box::new(io::Error::new(
+            io::ErrorKind::NotFound,
+            "uacme not found",
+        )));
     }
 
     let host = format!("www.{}", config.hostname());
 
     if cli.now {
         execute(&script_path, &host, config.www_dir());
-        return;
+        return Ok(());
     }
 
-    daemonize();
+    daemonize()?;
 
     loop {
         info!("waking up in {:?}", duration);
@@ -62,13 +68,18 @@ fn execute(script_path: &Path, host: &String, www: &Path) {
         host,
     ];
 
-    if get_webserver_pid().is_none() {
-        if !webserver_command(false) {
-            error!("ronaldos_webserver must be running");
+    match get_webserver_pid() {
+        None => {
+            if !webserver_command(false) {
+                error!("ronaldos_webserver must be running");
+            }
+        }
+        Some(pid) => {
+            info!("pid of running webserver {}", pid);
         }
     }
 
-    match Command::new("/bin/bash").args(uacme_args).output() {
+    match Command::new("uacme").args(uacme_args).output() {
         Ok(o) => {
             if o.status.success() {
                 info!("renew certificates succeeded");
@@ -85,19 +96,18 @@ fn execute(script_path: &Path, host: &String, www: &Path) {
     }
 }
 
-fn daemonize() {
+fn daemonize() -> Result<(), DaemonizeError> {
     const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
     const PID: &str = "/opt/var/run/ronaldo_uacme.pid";
 
-    let stdout = create_if_not_exists(format!("{}/daemon.out", STDOUT));
-    let stderr = create_if_not_exists(format!("{}/daemon.err", STDOUT));
+    let stdout = create_if_not_exists(format!("{}/daemon.out", STDOUT)).unwrap();
+    let stderr = create_if_not_exists(format!("{}/daemon.err", STDOUT)).unwrap();
     Daemonize::new()
         .pid_file(PID)
         //.chown_pid(true)
         .stdout(stdout)
         .stderr(stderr)
         .start()
-        .ok();
 }
 
 fn webserver_command(restart: bool) -> bool {
@@ -115,11 +125,13 @@ fn webserver_command(restart: bool) -> bool {
         .unwrap_or_default()
 }
 
-fn create_if_not_exists<P: AsRef<Path>>(path: P) -> File {
+fn create_if_not_exists<P: AsRef<Path>>(path: P) -> Result<File, io::Error> {
     let path: &Path = path.as_ref();
-    let parent = path.parent().unwrap();
+    let parent = path
+        .parent()
+        .ok_or(io::Error::new(io::ErrorKind::NotFound, ""))?;
     if !parent.exists() {
-        std::fs::create_dir_all(parent).unwrap();
+        std::fs::create_dir_all(parent)?;
     }
-    std::fs::File::create(path).unwrap()
+    std::fs::File::create(path)
 }

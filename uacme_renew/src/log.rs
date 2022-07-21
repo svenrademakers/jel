@@ -1,6 +1,6 @@
+use log::{Level, Metadata, Record};
 use log::{LevelFilter, SetLoggerError};
 use std::{fmt::Arguments, process::Command};
-use log::{Level, Metadata, Record};
 
 static LOGGER: SysLogger = SysLogger;
 struct SysLogger;
@@ -17,9 +17,11 @@ impl log::Log for SysLogger {
 
         match record.level() {
             Level::Error => {
+                eprintln!("{}", record.args());
                 logger_command(record.args(), "-s");
             }
             _ => {
+                println!("{}", record.args());
                 logger_command(record.args(), "-c");
             }
         }
