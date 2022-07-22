@@ -116,8 +116,7 @@ fn webserver_command(restart: bool) -> bool {
         false => "start",
     };
 
-    Command::new("/bin/bash")
-        .arg("ronaldos_webserver")
+    Command::new("ronaldos_webserver")
         .arg("-d")
         .arg(start)
         .output()
