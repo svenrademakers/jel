@@ -48,7 +48,10 @@ impl SessionMananger {
         &self,
         request: &http::Request<Body>,
     ) -> Result<Option<http::HeaderMap>, http::Response<Body>> {
-        if request.uri().path() == "/login.html" || request.uri().path() == "/dologin" {
+        if request.uri().path() == "/login.html"
+            || request.uri().path() == "/dologin"
+            || request.uri().path().to_string().starts_with("/.well-known")
+        {
             return Ok(None);
         }
 

@@ -71,10 +71,11 @@ async fn redirect_server(hostname: &str, addres: SocketAddr) -> Result<(), hyper
         let service = service_fn(move |req| {
             let location = redirect_location.clone();
             async move {
-                debug!("redirecting {} to {}", req.uri(), &location);
+                let redirect = format!("{}{}", location, req.uri());
+                debug!("redirecting {} to {}", req.uri(), &redirect);
                 http::Response::builder()
                     .status(http::StatusCode::MOVED_PERMANENTLY)
-                    .header("Location", location)
+                    .header("Location", redirect)
                     .body(Body::empty())
             }
         });

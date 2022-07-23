@@ -58,28 +58,24 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn execute(script_path: &Path, host: &String, www: &Path) {
-    let uacme_challenge_path = format!("UACME_CHALLENGE_PATH={}", www.to_string_lossy());
-    let uacme_args = [
-        &uacme_challenge_path,
-        "uacme",
-        "-h",
-        &script_path.to_string_lossy(),
-        "issue",
-        host,
-    ];
-
-    match get_webserver_pid() {
-        None => {
-            if !webserver_command(false) {
-                error!("ronaldos_webserver must be running");
-            }
-        }
-        Some(pid) => {
-            info!("pid of running webserver {}", pid);
+    if let None =
+        get_webserver_pid().expect("this application must know the existence of a pid file")
+    {
+        if !webserver_command(false) {
+            error!("ronaldos_webserver must be running");
+            return;
         }
     }
 
-    match Command::new("uacme").args(uacme_args).output() {
+    let challenge_path =
+        PathBuf::from_iter([www.to_str().unwrap(), ".well-known", "acme-challenge"]);
+    std::fs::create_dir_all(&challenge_path).unwrap();
+
+    match Command::new("uacme")
+        .args(["-h", &script_path.to_string_lossy(), "issue", host])
+        .env("CHALLENGE_PATH", challenge_path.as_os_str())
+        .output()
+    {
         Ok(o) => {
             if o.status.success() {
                 info!("renew certificates succeeded");

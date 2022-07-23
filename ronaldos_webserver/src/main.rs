@@ -98,7 +98,9 @@ fn daemonize(option: DeamonAction) -> Option<()> {
     match option {
         DeamonAction::START => Daemonize::new()
             .pid_file(ronaldos_config::PID)
-            //.chown_pid(true)
+            .chown_pid_file(true)
+            .group("root")
+            .user("admin")
             // .stdout(stdout)
             .stderr(stderr)
             .start()

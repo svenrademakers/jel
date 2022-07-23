@@ -87,8 +87,8 @@ class cargo_package:
         self.__write_control()
 
         def set_permissions(tarinfo):
-            tarinfo.gname = group
-            tarinfo.uname = owner
+            tarinfo.gid = group
+            tarinfo.uid = owner
             return tarinfo
 
         package_name = f"{self.name}_{self.version}.{self.architecture}.ipk"
@@ -116,7 +116,7 @@ class cargo_package:
 def create_repository(packages, output_dir):
     for pkg in packages:
         print("creating ipk for " + pkg.name)
-        pkg.create_package(output_dir, "root", "admin")
+        pkg.create_package(output_dir, 0,0)
     print("creating repository index..")
     subprocess.call(
         f"opkg-make-index {output_dir}/. > {output_dir}/Packages", shell=True)

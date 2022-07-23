@@ -1,9 +1,9 @@
 use serde::Deserialize;
 use std::fmt::Debug;
-use std::io::Read;
+use std::io::{self};
 use std::path::{Path, PathBuf};
 
-pub const WWW_DEFAULT: &str = concat!("/opt/share/ronaldos-webserver/www");
+pub const DEFAULT_DATA: &str = concat!("/opt/share/ronaldos-webserver");
 pub const CFG_PATH: &str = concat!("/opt/etc/ronaldos-webserver/config.cfg");
 pub const PID: &str = "/opt/var/run/ronaldos-webserver.pid";
 
@@ -47,14 +47,14 @@ macro_rules! config_definitions {
 }
 
 config_definitions!(
-    www_dir: PathBuf = PathBuf::from(format!("{}/www", WWW_DEFAULT)),
+    www_dir: PathBuf = PathBuf::from(format!("{}/www", DEFAULT_DATA)),
     port: u16 = 80,
     host: String = "0.0.0.0".to_string(),
     private_key: PathBuf = PathBuf::from("../test_certificates/server.key"),
     certificates: PathBuf = PathBuf::from("../test_certificates/server.crt"),
     verbose: bool = false,
     api_key: String = String::new(),
-    video_dir: PathBuf = PathBuf::from(format!("{}/videos", WWW_DEFAULT)),
+    video_dir: PathBuf = PathBuf::from(format!("{}/videos", DEFAULT_DATA)),
     login: Login = Default::default(),
     hostname: String = String::new(),
     interval_days: u64 = 7
@@ -64,11 +64,16 @@ pub fn get_application_config<P: AsRef<Path>>(config: &P) -> Config {
     Config::load(config)
 }
 
-pub fn get_webserver_pid() -> Option<u32> {
-    let mut buf = [0_u8; 33];
-
-    std::fs::File::open(PID)
-        .and_then(|mut f| f.read(&mut buf))
-        .ok()?;
-    std::str::from_utf8(&buf).ok()?.parse::<u32>().ok()
+pub fn get_webserver_pid() -> io::Result<Option<u32>> {
+    let pid = std::fs::read_to_string(PID)?;
+    if !pid.is_empty() {
+        pid.parse::<u32>().map(Option::Some).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("pid file unparseable {}", e),
+            )
+        })
+    } else {
+        Ok(None)
+    }
 }
