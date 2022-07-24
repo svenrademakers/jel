@@ -1,6 +1,8 @@
 [workspace]
 
 members = [
-    "ronaldos_website", 
-    "hyper_rusttls"
+    "ronaldos_webserver", 
+    "ronaldos_config",
+    "hyper_rusttls",
+    "uacme_renew",
 ]

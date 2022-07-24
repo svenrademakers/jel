@@ -4,9 +4,9 @@ use http::HeaderMap;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
 use log::debug;
+use ronaldos_config::Login;
 use std::{fmt::Display, ops::Add};
 
-use crate::cli::Login;
 const SESSION_ID_KEY: &str = "Session_id";
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,10 @@ impl SessionMananger {
         &self,
         request: &http::Request<Body>,
     ) -> Result<Option<http::HeaderMap>, http::Response<Body>> {
-        if request.uri().path() == "/login.html" || request.uri().path() == "/dologin" {
+        if request.uri().path() == "/login.html"
+            || request.uri().path() == "/dologin"
+            || request.uri().path().to_string().starts_with("/.well-known")
+        {
             return Ok(None);
         }
 

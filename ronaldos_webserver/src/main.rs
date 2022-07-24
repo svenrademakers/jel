@@ -1,27 +1,44 @@
-mod cli;
 mod http_server;
 mod logger;
 mod middleware;
 mod services;
 
-use crate::cli::{Cli, Config};
 use crate::middleware::{FootballApi, RecordingsOnDisk};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
-use clap::Parser;
-use cli::DeamonAction;
+use clap::{ArgEnum, Parser};
 use daemonize::Daemonize;
 use http_server::HttpServer;
 use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
 use log::*;
 use logger::init_log;
+use ronaldos_config::{get_application_config, Config};
 use std::io::{self, Error, ErrorKind};
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
+/// CLI structure that loads the commandline arguments. These arguments will be
+/// serialized in this structure
+#[derive(Parser, Default, Debug)]
+#[clap(author, version, about, long_about = None)]
+pub struct Cli {
+    #[clap(short, long, default_value = ronaldos_config::CFG_PATH )]
+    pub config: PathBuf,
+    #[clap(short, arg_enum)]
+    pub daemon: Option<DeamonAction>,
+}
+
+#[derive(ArgEnum, Clone, Debug)]
+pub enum DeamonAction {
+    START,
+    STOP,
+    RESTART,
+}
+
 fn main() -> io::Result<()> {
     let cli = Cli::parse();
-    let config = Config::load(&cli);
+    let config = get_application_config(&cli.config);
     let log_level = match config.verbose() {
         true => log::Level::Debug,
         false => log::Level::Info,
@@ -57,14 +74,21 @@ async fn application_main(config: Config) -> Result<(), Error> {
         .parse()
         .unwrap();
     let tls_cfg = load_server_config(&config.certificates(), &config.private_key());
-    if let Err(e) = run_server(Arc::new(service_context), address, config.hostname(),tls_cfg.ok()).await {
+
+    if let Err(e) = run_server(
+        Arc::new(service_context),
+        address,
+        config.hostname(),
+        tls_cfg.ok(),
+    )
+    .await
+    {
         error!("error running server: {}", e);
     }
     Ok(())
 }
 
 fn daemonize(option: DeamonAction) -> Option<()> {
-    const PID: &str = "/opt/var/run/ronaldo.pid";
     const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
     std::fs::create_dir_all(STDOUT).unwrap();
 
@@ -73,15 +97,18 @@ fn daemonize(option: DeamonAction) -> Option<()> {
 
     match option {
         DeamonAction::START => Daemonize::new()
-            .pid_file(PID)
-            //.chown_pid(true)
-           // .stdout(stdout)
+            .pid_file(ronaldos_config::PID)
+            .chown_pid_file(true)
+            .group("root")
+            .user("admin")
+            // .stdout(stdout)
             .stderr(stderr)
             .start()
             .ok(),
         DeamonAction::STOP => {
-            let pid = std::fs::read(PID).ok()?;
-            Command::new("kill")
+            let pid = std::fs::read(ronaldos_config::PID).ok()?;
+            Command::new("/bin/bash")
+                .arg("kill")
                 .arg(std::str::from_utf8(&pid).ok()?)
                 .output()
                 .ok()?;
