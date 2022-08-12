@@ -1,4 +1,4 @@
 mod football_info;
-mod recordings;
+mod stream_store;
 pub use football_info::*;
-pub use recordings::*;
+pub use stream_store::*;

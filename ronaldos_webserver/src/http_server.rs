@@ -5,11 +5,11 @@ use hyper_rusttls::service::RequestHandler;
 use log::{debug, info, trace};
 use std::fmt::Display;
 use std::io;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Clone)]
 pub struct HttpServer {
-    services: HashMap<&'static str, Arc<dyn RequestHandler>>,
+    services: BTreeMap<&'static str, Arc<dyn RequestHandler>>,
     session_manager: Option<Arc<SessionMananger>>,
 }
 
@@ -21,7 +21,7 @@ impl RequestHandler for HttpServer {
             Ok(headers) => headers,
             Err(response) => return Ok(response),
         };
-        
+
         let handler = self
             .services
             .get(request.uri().path())
@@ -81,7 +81,7 @@ impl HttpServer {
         }
         let session_manager = session_manager.map(Arc::new);
         let mut server = HttpServer {
-            services: HashMap::new(),
+            services: BTreeMap::new(),
             session_manager: session_manager.clone(),
         };
 

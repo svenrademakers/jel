@@ -1,49 +1,39 @@
 use std::{fmt::Display, sync::Arc};
 
+use crate::middleware::interface::StreamStore;
+
+use super::as_json_response;
 use async_trait::async_trait;
 use hyper_rusttls::service::RequestHandler;
 
-use crate::middleware::Recordings;
-
-use super::as_json_response;
-
-pub struct RecordingsService<T>
-where
-    T: Recordings,
-{
-    recordings: Arc<T>,
+pub struct RecordingsService {
+    stream_store: Arc<dyn StreamStore>,
 }
 
 #[async_trait]
-impl<T> RequestHandler for RecordingsService<T>
-where
-    T: Recordings,
-{
+impl RequestHandler for RecordingsService {
     async fn invoke(
         &self,
-        _: http::Request<hyper::Body>,
+        request: http::Request<hyper::Body>,
     ) -> std::io::Result<http::Response<hyper::Body>> {
-        as_json_response(self.recordings.get_all().await)
+        match request.uri().query().unwrap_or_default() {
+            "untagged" => as_json_response(&self.stream_store.get_untagged_sources().await),
+            _ => as_json_response(&self.stream_store.get_fixtures("fixtures").await),
+        }
     }
 
     fn path() -> &'static str {
-        "/recordings"
+        "/streams"
     }
 }
 
-impl<T> RecordingsService<T>
-where
-    T: Recordings,
-{
-    pub fn new(recordings: Arc<T>) -> Self {
-        RecordingsService { recordings }
+impl RecordingsService {
+    pub fn new(stream_store: Arc<dyn StreamStore>) -> Self {
+        RecordingsService { stream_store }
     }
 }
 
-impl<T> Display for RecordingsService<T>
-where
-    T: Recordings,
-{
+impl Display for RecordingsService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "match recordings")
     }

@@ -11,11 +11,11 @@ pub use recordings_service::*;
 use serde::Serialize;
 pub use session_mananger::*;
 
-pub fn as_json_response<T>(value: T) -> std::io::Result<http::Response<Body>>
+pub fn as_json_response<T>(value: &T) -> std::io::Result<http::Response<Body>>
 where
-    T: Serialize,
+    T: Serialize + ?Sized,
 {
-    let as_string = serde_json::to_string(&value)?;
+    let as_string = serde_json::to_string(value)?;
 
     Ok(http::Response::builder()
         .status(http::StatusCode::OK)

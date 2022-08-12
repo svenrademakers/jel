@@ -1,4 +1,3 @@
-use super::Recordings;
 use async_trait::async_trait;
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use http::{Request, Uri};
@@ -7,8 +6,10 @@ use hyper_rusttls::https_connector::HttpsConnector;
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{collections::HashMap, error::Error, str::FromStr, sync::Arc};
+use std::{collections::BTreeMap, error::Error, str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
+
+use super::interface::StreamStore;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Fixture {
@@ -22,16 +23,16 @@ pub struct Fixture {
 }
 
 #[async_trait]
-pub trait FootballInfo: 'static + Send + Sync {
+pub trait FootballInfo: Send + Sync {
     async fn fixtures(&self, season: &str) -> Vec<Fixture>;
 }
 
 #[allow(dead_code)]
 pub struct FootballApi {
-    data: RwLock<HashMap<String, Fixture>>,
+    data: RwLock<BTreeMap<String, Fixture>>,
     url: http::uri::Uri,
     api_key: String,
-    recordings: Arc<dyn Recordings>,
+    recordings: Arc<dyn StreamStore>,
 }
 
 impl FootballApi {
@@ -39,7 +40,7 @@ impl FootballApi {
         season: &str,
         team: &str,
         api_key: String,
-        recordings: Arc<dyn Recordings>,
+        recordings: Arc<dyn StreamStore>,
     ) -> Self {
         let api_uri = http::Uri::from_str(&format!(
             "https://api-football-v1.p.rapidapi.com/v3/fixtures?season={}&team={}",
@@ -72,7 +73,7 @@ impl FootballInfo for FootballApi {
     }
 }
 
-async fn load(str: &str) -> Result<HashMap<String, Fixture>, Box<dyn Error>> {
+async fn load(str: &str) -> Result<BTreeMap<String, Fixture>, Box<dyn Error>> {
     let json: serde_json::Value = serde_json::from_str(&str)?;
     if let Some(msg) = json.get("message") {
         error!("{}", msg);
@@ -82,7 +83,7 @@ async fn load(str: &str) -> Result<HashMap<String, Fixture>, Box<dyn Error>> {
         )));
     }
 
-    let mut fixtures = HashMap::new();
+    let mut fixtures = BTreeMap::new();
     for fixt in json["response"].as_array().unwrap() {
         let score;
         if fixt["goals"]["home"] == json!(null) || fixt["goals"]["away"] == json!(null) {
