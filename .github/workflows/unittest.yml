@@ -1,0 +1,14 @@
+name: unittest
+on: push
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout git repo
+        uses: actions/checkout@v2
+      - name: run tests
+        run: cargo test
