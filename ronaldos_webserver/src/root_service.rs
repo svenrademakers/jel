@@ -8,13 +8,13 @@ use std::io;
 use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Clone)]
-pub struct HttpServer {
+pub struct RootService {
     services: BTreeMap<&'static str, Arc<dyn RequestHandler>>,
     session_manager: Option<Arc<SessionMananger>>,
 }
 
 #[async_trait::async_trait]
-impl RequestHandler for HttpServer {
+impl RequestHandler for RootService {
     async fn invoke(&self, request: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
         let permission = self.verify_permissions(&request).await;
         let extra_headers = match permission {
@@ -68,7 +68,7 @@ impl RequestHandler for HttpServer {
     }
 }
 
-impl HttpServer {
+impl RootService {
     pub async fn new(
         www_dir: &std::path::Path,
         session_manager: Option<SessionMananger>,
@@ -80,7 +80,7 @@ impl HttpServer {
             ));
         }
         let session_manager = session_manager.map(Arc::new);
-        let mut server = HttpServer {
+        let mut server = RootService {
             services: BTreeMap::new(),
             session_manager: session_manager.clone(),
         };
@@ -129,7 +129,7 @@ impl HttpServer {
     }
 }
 
-impl Display for HttpServer {
+impl Display for RootService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "http Server")
     }

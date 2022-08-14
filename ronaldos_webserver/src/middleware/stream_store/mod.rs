@@ -2,33 +2,20 @@ mod data_types;
 mod file_watcher;
 pub mod interface;
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ffi::OsStr,
-    fs::DirEntry,
-    ops::Deref,
-    path::{Path, PathBuf},
-    process::Command,
-    sync::{
-        mpsc::{channel, Receiver},
-        Arc,
-    },
-};
-
 use self::{
     data_types::MetaFile,
     interface::{RegisterError, Stream, StreamId, StreamStore},
 };
 use async_trait::async_trait;
-use futures_util::{pin_mut, Future, StreamExt};
+use futures_util::{pin_mut, StreamExt};
 use log::{debug, error, info, warn};
-use notify::{DebouncedEvent, RecursiveMode, Watcher};
-use tokio::{
-    io::AsyncWriteExt,
-    join,
-    sync::{RwLock, RwLockReadGuard},
-    task::JoinHandle,
+use std::{
+    collections::BTreeMap,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
+use tokio::sync::RwLock;
 
 /// Implementation of the streamstore trait where all streams reside on disk.
 /// This object updates its internal bookkeeping when file changes happen. a new
@@ -48,7 +35,7 @@ pub struct LocalStreamStore {
     /// updated to reflect this.
     file_cache: RwLock<BTreeMap<PathBuf, StreamId>>,
     /// This watcher object is used to flag if init is called on the object.
-    watcher_sender: Option<tokio::sync::mpsc::Sender<()>>,
+    watcher_sender: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl LocalStreamStore {
@@ -69,23 +56,25 @@ impl LocalStreamStore {
     }
 
     pub fn run(instance: &mut Arc<LocalStreamStore>) {
-        let (kill_sender, kill_receiver) = tokio::sync::mpsc::channel(8);
+        let (kill_sender, kill_receiver) = tokio::sync::oneshot::channel();
 
         let value =
             Arc::get_mut(instance).expect("LocalStreamStore cannot be shared before run call");
         value.watcher_sender = Some(kill_sender);
 
         // spawn loading task
-        tokio::spawn(LocalStreamStore::load(
-            instance.clone(),
-            instance.root.to_path_buf(),
-        ));
+        let loading_instance = instance.clone();
+        tokio::spawn(async move {
+            loading_instance
+                .load(loading_instance.root.to_path_buf())
+                .await;
+        });
 
         // spawn file watcher task
         Self::watch_for_changes(instance.clone(), kill_receiver);
     }
 
-    async fn load(self: Arc<LocalStreamStore>, path: PathBuf) -> Option<()> {
+    async fn load(&self, path: PathBuf) -> Option<()> {
         let stream_iter = tokio_stream::iter(self.scan(&path).await.ok()?)
             .filter_map(|f| MetaFile::into_metadata(f, &self.root));
         pin_mut!(stream_iter);
@@ -187,9 +176,14 @@ impl LocalStreamStore {
         let mut file_cache = self.file_cache.write().await;
         let path = path.strip_prefix(&self.root).unwrap();
 
-        match file_cache.get(path) {
+        match file_cache.get(path).cloned() {
             Some(id) if path.extension().unwrap_or_default() == "stream" => {
-                stream_store.remove(id);
+                if let Some(stream) = stream_store.get(&id) {
+                    for source in &stream.sources {
+                        file_cache.remove(&source.url);
+                    }
+                    stream_store.remove(&id);
+                }
             }
             None => return,
             _ => (),
@@ -382,7 +376,7 @@ mod tests {
             .await
             .unwrap();
 
-        LocalStreamStore::load(stream_store.clone(), temp.path().to_path_buf()).await;
+        LocalStreamStore::load(&stream_store.clone(), temp.path().to_path_buf()).await;
         assert_stream(
             Stream {
                 sources: vec![
@@ -412,7 +406,7 @@ mod tests {
             .await
             .unwrap();
 
-        LocalStreamStore::load(stream_store.clone(), temp.path().join("2_test2.stream")).await;
+        LocalStreamStore::load(&stream_store.clone(), temp.path().join("2_test2.stream")).await;
 
         assert_stream(
             Stream {
@@ -483,5 +477,19 @@ mod tests {
             .removed(stream_store.root.join("blaat.dash"))
             .await;
         assert!(stream_store.get_untagged_sources().await.is_empty());
+
+        stream_store
+            .removed(stream_store.root.join("1234_test1.stream"))
+            .await;
+
+        assert!(!stream_store
+            .store
+            .read()
+            .await
+            .contains_key(&StreamId::FootballAPI(1234)));
+
+        let cache = stream_store.file_cache.read().await;
+        assert!(!cache.contains_key(&PathBuf::from("test1.dash")));
+        assert!(!cache.contains_key(&PathBuf::from("test1.m3u8")));
     }
 }

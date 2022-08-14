@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeMap,
     fmt::Debug,
-    ops::Deref,
     path::{Path, PathBuf, StripPrefixError},
 };
 

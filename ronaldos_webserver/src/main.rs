@@ -1,18 +1,18 @@
-mod http_server;
 mod logger;
 mod middleware;
+mod root_service;
 mod services;
 
 use crate::middleware::{FootballApi, LocalStreamStore};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
 use clap::{ArgEnum, Parser};
 use daemonize::Daemonize;
-use http_server::HttpServer;
 use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
 use log::*;
 use logger::init_log;
 use ronaldos_config::{get_application_config, Config};
+use root_service::RootService;
 use std::io::{self, Error, ErrorKind};
 use std::path::PathBuf;
 use std::process::Command;
@@ -54,10 +54,9 @@ fn main() -> io::Result<()> {
 }
 
 async fn application_main(config: Config) -> Result<(), Error> {
-    debug!("loaded:\n {:#?}", config);
     let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
     LocalStreamStore::run(&mut recordings_disk);
-    
+
     let football_api = Arc::new(
         FootballApi::new(
             "2022",
@@ -72,7 +71,7 @@ async fn application_main(config: Config) -> Result<(), Error> {
         false => Some(SessionMananger::new(config.login())),
         true => None,
     };
-    let mut service_context = HttpServer::new(config.www_dir(), service_manager).await?;
+    let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
     service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
     service_context.append_service(FileService::new(config.www_dir()).await?);
     service_context.append_service(RecordingsService::new(recordings_disk));
