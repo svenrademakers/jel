@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use log::debug;
+use log::{debug, trace};
 use notify::{DebouncedEvent, RecursiveMode, Watcher};
 use tokio::sync::oneshot::Receiver;
 
@@ -29,7 +29,6 @@ impl LocalStreamStore {
 
             while *EXIT.read().unwrap() == false {
                 if let Ok(event) = rx.recv_timeout(Duration::from_secs(3)) {
-                    debug!("event {:?}", event);
                     let _ = tokio::spawn(Self::handle_debounce_event(stream_store.clone(), event));
                 }
             }
@@ -43,7 +42,7 @@ impl LocalStreamStore {
     }
 
     async fn handle_debounce_event(stream_store: Arc<LocalStreamStore>, event: DebouncedEvent) {
-        debug!("received {:?}", event);
+        trace!("received {:?}", event);
         match event {
             DebouncedEvent::Create(p) => {
                 let _ = stream_store.load(p).await;

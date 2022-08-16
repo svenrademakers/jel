@@ -16,7 +16,7 @@ impl RequestHandler for GithubWebhook {
     }
 
     fn path() -> &'static str {
-        "/webhook"
+        "webhook"
     }
 }
 

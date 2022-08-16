@@ -1,26 +1,47 @@
-mod data_types;
+pub mod data_types;
 mod file_watcher;
-pub mod interface;
 
-use self::{
-    data_types::MetaFile,
-    interface::{RegisterError, Stream, StreamId, StreamStore},
-};
-use async_trait::async_trait;
+use self::data_types::*;
+use super::cache_map::CacheController;
 use futures_util::{pin_mut, StreamExt};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
+    hash::Hash,
+    io::{self, Write},
+    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::sync::RwLock;
 
-/// Implementation of the streamstore trait where all streams reside on disk.
+/// Implements functionality to get video streams that are persisted on a filesystem.
 /// This object updates its internal bookkeeping when file changes happen. a new
 /// stream is detected if a meta file, [StreamMetaFile], is detected in the
 /// specified root folder.
+///
+/// # About Streams
+///
+/// Currently 2 types of streams exist:
+/// 1. Football fixture related. These streams correspond to an actual football
+///    fixture.
+/// 2. Untagged. These are streams that do not direct relate to an actual
+///    fixture, but can be any content.
+///
+/// Football streams have the benefit in that they can be correlated with other
+/// football information and systems. The actual key is dictated by an external
+/// trait, see [super::FootballInfo].
+///
+/// you can assume the following about stream data:
+/// * [StreamId] defines the unique key to index an stream
+/// * [StreamId::FootballAPI] should reference a valid `fixture_id`
+/// * a [Stream] can contain multiple sources in multiple formats. This is to
+///   offer viewers compatibility and the choice to throttle different
+///   qualities. All sources show the same content!
+///
+/// Implementation of the streamstore trait where all streams reside on disk.
+
 pub struct LocalStreamStore {
     /// Directory which all stream files will be written to. All paths used in
     /// [StreamStoreImpl] are relative compared to the root directory
@@ -33,24 +54,27 @@ pub struct LocalStreamStore {
     /// When the files on disk change this cache should be updated as well.
     /// Equally when a file gets associated with a stream the streamId should be
     /// updated to reflect this.
-    file_cache: RwLock<BTreeMap<PathBuf, StreamId>>,
+    fs_cache: RwLock<BTreeMap<PathBuf, StreamId>>,
+    cache_controller: RwLock<CacheController<Path, Arc<Vec<u8>>, 128>>,
     /// This watcher object is used to flag if init is called on the object.
     watcher_sender: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl LocalStreamStore {
     const FILTERED_EXTENSIONS: [&'static str; 3] = ["dash", "m3u8", "mpd"];
-
-    pub async fn new(root: &Path) -> Arc<Self> {
+    pub async fn new(root: &Path) -> Arc<LocalStreamStore> {
         if !root.exists() {
             warn!("creating {}, does not exist", root.to_string_lossy());
             tokio::fs::create_dir_all(&root).await.unwrap();
         }
 
+        //let cache_storage = std::iter::repeat_with(|| V::default()).take(N).collect();
+
         Arc::new(LocalStreamStore {
             root: root.to_path_buf(),
             store: RwLock::new(BTreeMap::default()),
-            file_cache: RwLock::new(BTreeMap::new()),
+            fs_cache: RwLock::new(BTreeMap::new()),
+            cache_controller: RwLock::new(CacheController::new()),
             watcher_sender: None,
         })
     }
@@ -112,7 +136,7 @@ impl LocalStreamStore {
                 .strip_prefix(&self.root)
                 .expect("root tested on the start of the function")
                 .to_path_buf();
-            debug!("scanning {}", relative.to_string_lossy());
+            trace!("scanning {}", relative.to_string_lossy());
 
             if let Ok(file) = std::fs::File::open(path) {
                 match path.extension().and_then(OsStr::to_str) {
@@ -159,7 +183,7 @@ impl LocalStreamStore {
             loose_files.extend(iter);
         }
 
-        self.file_cache.write().await.extend(loose_files);
+        self.fs_cache.write().await.extend(loose_files);
 
         info!(
             "found {} stream(s) in {}",
@@ -167,13 +191,13 @@ impl LocalStreamStore {
             path.to_string_lossy()
         );
 
-        info!("cache size: {} entries", self.file_cache.read().await.len());
+        info!("cache size: {} entries", self.fs_cache.read().await.len());
         Ok(found.into_iter())
     }
 
     pub async fn removed(&self, path: PathBuf) {
         let mut stream_store = self.store.write().await;
-        let mut file_cache = self.file_cache.write().await;
+        let mut file_cache = self.fs_cache.write().await;
         let path = path.strip_prefix(&self.root).unwrap();
 
         match file_cache.get(path).cloned() {
@@ -190,38 +214,27 @@ impl LocalStreamStore {
         }
         file_cache.remove(path);
     }
-}
 
-/// Adds a given url as prefix to the current base url. This base url is
-fn prepend_prefix<T: Iterator<Item = (StreamId, Stream)>>(
-    iter: T,
-    prefix: &'static str,
-) -> impl Iterator<Item = (StreamId, Stream)> {
-    iter.map(move |(k, mut v)| {
-        for source in v.sources.iter_mut() {
-            let full = PathBuf::from(prefix).join(source.url.clone());
-            source.url = full;
-        }
+    pub async fn get_all(&self, prefix: &'static str) -> BTreeMap<u32, Stream> {
+        let map = self.store.read().await.clone();
+        prepend_prefix(map.into_iter(), prefix)
+            .map(|(id, stream)| (id.get_raw_key().unwrap(), stream))
+            .collect()
+    }
 
-        (k, v)
-    })
-}
 
-#[async_trait]
-impl StreamStore for LocalStreamStore {
-    async fn get_fixtures(&self, prefix: &'static str) -> BTreeMap<u32, Stream> {
+    pub async fn get_fixtures(&self, prefix: &'static str) -> BTreeMap<u32, Stream> {
         let map = self.store.read().await.clone();
         prepend_prefix(map.into_iter(), prefix)
             .filter_map(|(id, stream)| match id {
                 StreamId::FootballAPI(id) => Some((id, stream)),
-                StreamId::Untagged(_) => None,
-                StreamId::None => None,
+                _ => None,
             })
             .collect()
     }
 
     /// registers a new fixture
-    async fn register(
+    pub async fn register(
         &self,
         id: StreamId,
         sources: Vec<PathBuf>,
@@ -269,29 +282,62 @@ impl StreamStore for LocalStreamStore {
         Ok(())
     }
 
-    async fn get_untagged_sources(&self) -> Vec<PathBuf> {
-        self.file_cache
+    pub async fn get_untagged_sources(&self, prefix: &'static str) -> Vec<PathBuf> {
+        self.fs_cache
             .read()
             .await
             .iter()
             .filter_map(|(k, v)| {
                 if &StreamId::None == v {
-                    Some(k.clone())
+                    Some(PathBuf::from(prefix).join(k))
                 } else {
                     None
                 }
             })
             .collect::<Vec<PathBuf>>()
     }
+
+    pub async fn get_source<P>(&self, file: P) -> std::io::Result<Arc<Vec<u8>>>
+    where
+        P: Hash + AsRef<Path>,
+    {
+        let path = self.root.join(file.as_ref());
+        // if let Some(buffer) = self.cache_controller.read().await.get() {
+        //     return Ok(buffer.clone());
+        // }
+
+        // Ok(self
+        //     .cache_controller
+        //     .write()
+        //     .await
+        //     .insert(file.as_ref(), Arc::new(tokio::fs::read(path).await?))
+        //     .clone())
+
+        Ok(Arc::new(tokio::fs::read(path).await?))
+    }
+}
+
+/// Adds a given url as prefix to the current base url. This base url is
+fn prepend_prefix<T: Iterator<Item = (StreamId, Stream)>>(
+    iter: T,
+    prefix: &'static str,
+) -> impl Iterator<Item = (StreamId, Stream)> {
+    iter.map(move |(k, mut v)| {
+        for source in v.sources.iter_mut() {
+            let full = PathBuf::from(prefix).join(source.url.clone());
+            source.url = full;
+        }
+
+        (k, v)
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
-    use crate::{
-        logger::init_log,
-        middleware::interface::{Source, StreamingType},
-    };
+    use crate::logger::init_log;
     use tempdir::TempDir;
 
     fn assert_stream(mut a: Stream, mut b: Stream) {
@@ -306,6 +352,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_scan() {
+        init_log(log::Level::Debug);
+
         let temp = TempDir::new("test").unwrap();
         let stream_store = LocalStreamStore::new(temp.path()).await;
         assert_eq!(0, stream_store.scan(temp.path()).await.unwrap().count());
@@ -314,7 +362,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(0, stream_store.scan(temp.path()).await.unwrap().count());
-        assert_eq!(0, stream_store.file_cache.read().await.len());
+        assert_eq!(0, stream_store.fs_cache.read().await.len());
 
         stream_store
             .register(
@@ -337,7 +385,7 @@ mod tests {
         assert_eq!(1, stream_store.scan(temp.path()).await.unwrap().count());
 
         {
-            let cache = stream_store.file_cache.read().await;
+            let cache = stream_store.fs_cache.read().await;
 
             assert_eq!(
                 Some(&StreamId::FootballAPI(1234)),
@@ -348,13 +396,12 @@ mod tests {
                 cache.get(&PathBuf::from("test1.dash"))
             );
         }
-        let cache = stream_store.get_untagged_sources().await;
+        let cache = stream_store.get_untagged_sources("").await;
         assert_eq!(vec![PathBuf::from("nonsense.dash").as_path()], cache);
     }
 
     #[tokio::test]
     async fn test_load_and_remove() {
-        init_log(log::Level::Debug);
         let temp = TempDir::new("test").unwrap();
         let stream_store = LocalStreamStore::new(temp.path()).await;
 
@@ -445,7 +492,7 @@ mod tests {
             },
             stream_store.store.read().await[&StreamId::FootballAPI(1234)].clone(),
         );
-        let cache = stream_store.file_cache.read().await;
+        let cache = stream_store.fs_cache.read().await;
         assert_eq!(
             StreamId::FootballAPI(1234),
             cache[&PathBuf::from("1234_test1.stream")]
@@ -470,13 +517,13 @@ mod tests {
 
         assert_eq!(
             &[PathBuf::from("blaat.dash")],
-            &stream_store.get_untagged_sources().await.as_slice()
+            &stream_store.get_untagged_sources("").await.as_slice()
         );
 
         stream_store
             .removed(stream_store.root.join("blaat.dash"))
             .await;
-        assert!(stream_store.get_untagged_sources().await.is_empty());
+        assert!(stream_store.get_untagged_sources("").await.is_empty());
 
         stream_store
             .removed(stream_store.root.join("1234_test1.stream"))
@@ -488,7 +535,7 @@ mod tests {
             .await
             .contains_key(&StreamId::FootballAPI(1234)));
 
-        let cache = stream_store.file_cache.read().await;
+        let cache = stream_store.fs_cache.read().await;
         assert!(!cache.contains_key(&PathBuf::from("test1.dash")));
         assert!(!cache.contains_key(&PathBuf::from("test1.m3u8")));
     }

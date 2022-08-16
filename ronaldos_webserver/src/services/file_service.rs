@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
-use log::info;
-use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use super::lookup_content_type;
 
 pub struct FileService {
     www_dir: PathBuf,
@@ -55,61 +55,13 @@ impl FileService {
             response = response.header(http::header::CONTENT_TYPE, content_type);
         }
 
-        response = append_additional_headers(&path, response);
-
         Ok(response.body(bytes.into()).unwrap())
     }
-}
-
-fn lookup_content_type(path: &Path) -> Option<&'static str> {
-    let content_type = match path.extension().and_then(OsStr::to_str) {
-        Some("jpeg") => Some("image/jpeg"),
-        Some("png") => Some("image/png"),
-        Some("svg") => Some("image/svg+xml"),
-        Some("json") => Some("application/json"),
-        Some("js") => Some("text/javascript"),
-        Some("css") => Some("text/css"),
-        Some("html" | "htm") => Some("text/html; charset=UTF-8"),
-        _ => None,
-    };
-    content_type
-}
-
-fn append_additional_headers(
-    path: &Path,
-    builder: http::response::Builder,
-) -> http::response::Builder {
-    match path.extension().and_then(OsStr::to_str) {
-        Some("m3u8" | "ts") => builder
-            .header(http::header::CACHE_CONTROL, "no-cache")
-            .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "'*' always")
-            .header(
-                http::header::ACCESS_CONTROL_EXPOSE_HEADERS,
-                "Content-Length",
-            ),
-        _ => builder,
-    }
-}
-
-fn preflight_reponse() -> http::Response<Body> {
-    http::Response::builder()
-        .status(http::StatusCode::NO_CONTENT)
-        .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
-        .header(http::header::CONTENT_TYPE, "text/plain charset=UTF-8")
-        .header(http::header::CONTENT_LENGTH, "0")
-        .body(Body::empty())
-        .unwrap()
 }
 
 #[async_trait]
 impl RequestHandler for FileService {
     async fn invoke(&self, request: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
-        if request.method() == http::Method::OPTIONS {
-            info!("preflight for {:?}", request);
-            return Ok(preflight_reponse());
-        }
-
         let mut path = request.uri().path();
         if path.eq("/") {
             path = "/index.html";
@@ -124,7 +76,7 @@ impl RequestHandler for FileService {
     }
 
     fn path() -> &'static str {
-        "/"
+        ""
     }
 }
 
