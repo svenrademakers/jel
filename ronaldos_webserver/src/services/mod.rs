@@ -24,6 +24,7 @@ fn lookup_content_type(path: &Path) -> Option<&'static str> {
         Some("css") => Some("text/css"),
         Some("html" | "htm") => Some("text/html; charset=UTF-8"),
         Some("m3u8") => Some("application/x-mpegURL"),
+        Some("mp4") => Some("video/mp4"),
         _ => None,
     };
     content_type
