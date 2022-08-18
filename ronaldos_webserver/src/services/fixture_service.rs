@@ -4,17 +4,17 @@ use hyper_rusttls::service::RequestHandler;
 use serde_json::Value;
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
-use crate::middleware::{interface::StreamStore, FootballInfo};
+use crate::middleware::{FootballInfo, LocalStreamStore};
 
 use super::as_json_response;
 
 pub struct FixtureService {
     football_info: Arc<dyn FootballInfo>,
-    recordings: Arc<dyn StreamStore>,
+    recordings: Arc<LocalStreamStore>,
 }
 
 impl FixtureService {
-    pub fn new(football_info: Arc<dyn FootballInfo>, recordings: Arc<dyn StreamStore>) -> Self {
+    pub fn new(football_info: Arc<dyn FootballInfo>, recordings: Arc<LocalStreamStore>) -> Self {
         FixtureService {
             football_info,
             recordings,
@@ -45,7 +45,7 @@ impl RequestHandler for FixtureService {
     }
 
     fn path() -> &'static str {
-        "/fixtures"
+        "fixtures"
     }
 }
 

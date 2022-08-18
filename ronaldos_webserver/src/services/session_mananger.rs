@@ -174,7 +174,7 @@ impl RequestHandler for SessionMananger {
     }
 
     fn path() -> &'static str {
-        "/dologin"
+        "dologin"
     }
 }
 

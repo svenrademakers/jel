@@ -9,7 +9,7 @@ use serde_json::json;
 use std::{collections::BTreeMap, error::Error, str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
 
-use super::interface::StreamStore;
+use super::LocalStreamStore;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Fixture {
@@ -32,7 +32,7 @@ pub struct FootballApi {
     data: RwLock<BTreeMap<String, Fixture>>,
     url: http::uri::Uri,
     api_key: String,
-    recordings: Arc<dyn StreamStore>,
+    recordings: Arc<LocalStreamStore>,
 }
 
 impl FootballApi {
@@ -40,7 +40,7 @@ impl FootballApi {
         season: &str,
         team: &str,
         api_key: String,
-        recordings: Arc<dyn StreamStore>,
+        recordings: Arc<LocalStreamStore>,
     ) -> Self {
         let api_uri = http::Uri::from_str(&format!(
             "https://api-football-v1.p.rapidapi.com/v3/fixtures?season={}&team={}",

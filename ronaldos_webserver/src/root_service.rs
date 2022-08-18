@@ -1,4 +1,4 @@
-use crate::services::SessionMananger;
+use crate::services::{first_segment_uri, SessionMananger};
 use http::{HeaderMap, Request};
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
@@ -22,15 +22,17 @@ impl RequestHandler for RootService {
             Err(response) => return Ok(response),
         };
 
+
+        let path = first_segment_uri(&request).unwrap_or("/");
         let handler = self
             .services
-            .get(request.uri().path())
-            .or_else(|| self.services.get("/"))
+            .get(path)
+            .or_else(|| self.services.get(""))
             .expect("there should should always be a default http handler defined");
 
         debug!(
-            "handling request {} {} using {}",
-            &request.uri().path(),
+            "handling request '{}' {} using {}",
+            &request.uri(),
             &request.method(),
             handler
         );
@@ -64,7 +66,7 @@ impl RequestHandler for RootService {
     where
         Self: Sized,
     {
-        todo!()
+        "/"
     }
 }
 
