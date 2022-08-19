@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
 use log::info;
-use std::{fmt::Display, ops::Deref, path::PathBuf, sync::Arc};
+use std::{ffi::OsStr, fmt::Display, ops::Deref, path::PathBuf, sync::Arc};
 
 pub struct RecordingsService {
     stream_store: Arc<LocalStreamStore>,
@@ -62,13 +62,15 @@ impl RequestHandler for RecordingsService {
         if request.method() == http::Method::OPTIONS {
             return Ok(preflight_response());
         }
-        match request.uri().path()[1..].split_terminator('/').nth(1) {
-            Some("test") if self.dev_mode => self.test().await,
-            Some("all") => as_json_response(&self.stream_store.get_all("streams").await),
-            Some("untagged") => {
+
+        let cursor = request.uri().path()[1..].find('/').unwrap() + 2;
+        match &request.uri().path()[cursor..] {
+            "test" if self.dev_mode => self.test().await,
+            "all" => as_json_response(&self.stream_store.get_all("streams").await),
+            "untagged" => {
                 as_json_response(&self.stream_store.get_untagged_sources("streams").await)
             }
-            Some(file) => {
+            file => {
                 let data = self.stream_store.get_source(file).await.unwrap();
                 let mut response = http::response::Builder::new()
                     .header(http::header::CACHE_CONTROL, "no-cache")
@@ -85,7 +87,7 @@ impl RequestHandler for RecordingsService {
 
                 Ok(response.body(Body::from(data.deref().clone())).unwrap())
             }
-            None => Ok(http::Response::builder()
+            _ => Ok(http::Response::builder()
                 .status(http::StatusCode::NOT_FOUND)
                 .body(Body::empty())
                 .unwrap()),
