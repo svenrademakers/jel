@@ -3,6 +3,7 @@ mod file_watcher;
 
 use self::data_types::*;
 use super::cache_map::CacheController;
+use chrono::{DateTime, Utc};
 use futures_util::{pin_mut, StreamExt};
 use log::{debug, error, info, trace, warn};
 use std::{
@@ -13,6 +14,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
+    time::SystemTimeError,
 };
 use tokio::sync::RwLock;
 
@@ -185,13 +187,12 @@ impl LocalStreamStore {
 
         self.fs_cache.write().await.extend(loose_files);
 
-        info!(
+        debug!(
             "found {} stream(s) in {}",
             found.len(),
             path.to_string_lossy()
         );
-
-        info!("cache size: {} entries", self.fs_cache.read().await.len());
+        debug!("cache size: {} entries", self.fs_cache.read().await.len());
         Ok(found.into_iter())
     }
 
@@ -213,6 +214,7 @@ impl LocalStreamStore {
             _ => (),
         }
         file_cache.remove(path);
+        debug!("removed {} from cache", path.to_string_lossy());
     }
 
     pub async fn get_all(&self, prefix: &'static str) -> BTreeMap<u32, Stream> {
@@ -221,7 +223,6 @@ impl LocalStreamStore {
             .map(|(id, stream)| (id.get_raw_key().unwrap(), stream))
             .collect()
     }
-
 
     pub async fn get_fixtures(&self, prefix: &'static str) -> BTreeMap<u32, Stream> {
         let map = self.store.read().await.clone();
@@ -238,8 +239,8 @@ impl LocalStreamStore {
         &self,
         id: StreamId,
         sources: Vec<PathBuf>,
-        live: bool,
-        title: Option<PathBuf>,
+        title: String,
+        date: DateTime<Utc>,
     ) -> Result<(), RegisterError> {
         if sources.is_empty() {
             return Err(RegisterError::SourceArgumentEmpty);
@@ -252,8 +253,8 @@ impl LocalStreamStore {
         let registration = MetaFile {
             id,
             filenames: sources,
-            live: Some(live),
             title,
+            date,
         };
 
         let as_str = serde_yaml::to_string(&registration).map_err(RegisterError::ParseError)?;

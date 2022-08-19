@@ -48,21 +48,40 @@ class Match {
 }
 
 $(document).ready(function () {
-    $.get("fixtures", function (data) {
-        fixtures = data;
-        let x = upcoming_fixture();
-        set_current_fixture(x);
-        load_schedule_table(x);
+    // $.get("fixtures", function (data) {
+    //     fixtures = data;
+    //     let x = upcoming_fixture();
+    //     set_current_fixture(x);
+    //     load_schedule_table(x);
+    // });
+
+    $.get("streams/all", function(data) {
+        console.log(JSON.stringify(data));
+        let output = "";
+        for (const [key, value] of Object.entries(data)) {
+            output += "<tr>";
+            let date = new Date(0);
+            date.setUTCSeconds(value["date"]);
+            output += "<td>" + $.format.date(date, "D MMM yyyy") + "</td>";
+            output += "<td>" + value["title"] + "</td>";
+            output += "<td><button type=\"button\" onclick=\"set_video_src('" + value["sources"][0]["url"] + "')\" class=\"btn btn-outline-primary\">Watch</button></td>";
+            output += "<tr>"
+        }
+        $("#schedule_table").html(output);
+
     });
     var player = videojs('video_player', {
         autoplay: true,
-        liveui: true,
+        liveui: false,
         inactivityTimeout: 0,
     }, function () {
         videojs.log("player loaded", this.currentSrc());
     });
 })
-
+function set_video_src(url) {
+    var video = videojs("video_player");
+    video.src(url);
+}
 function load_schedule_table(x) {
     const index = Object.keys(fixtures).findIndex(k => k === x);
     let output = "";

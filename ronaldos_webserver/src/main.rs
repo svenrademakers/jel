@@ -74,7 +74,7 @@ async fn application_main(config: Config) -> Result<(), Error> {
     let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
     service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
     service_context.append_service(FileService::new(config.www_dir()).await?);
-    service_context.append_service(RecordingsService::new(recordings_disk));
+    service_context.append_service(RecordingsService::new(recordings_disk, *config.verbose()));
     let address = format!("{}:{}", config.host(), config.port())
         .parse()
         .unwrap();

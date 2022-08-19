@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use log::{debug, trace};
+use log::{debug, info, trace, warn};
 use notify::{DebouncedEvent, RecursiveMode, Watcher};
 use tokio::sync::oneshot::Receiver;
 
@@ -27,11 +27,13 @@ impl LocalStreamStore {
                 &stream_store.root.to_string_lossy()
             );
 
-            while *EXIT.read().unwrap() == false {
+            while !*EXIT.read().unwrap() {
                 if let Ok(event) = rx.recv_timeout(Duration::from_secs(3)) {
-                    let _ = tokio::spawn(Self::handle_debounce_event(stream_store.clone(), event));
+                    tokio::spawn(Self::handle_debounce_event(stream_store.clone(), event));
                 }
             }
+
+            info!("exiting file watcher");
         });
 
         tokio::spawn(async move {
@@ -42,22 +44,23 @@ impl LocalStreamStore {
     }
 
     async fn handle_debounce_event(stream_store: Arc<LocalStreamStore>, event: DebouncedEvent) {
-        trace!("received {:?}", event);
-        match event {
-            DebouncedEvent::Create(p) => {
-                let _ = stream_store.load(p).await;
-            }
-            DebouncedEvent::Write(p) => {
-                let _ = stream_store.load(p).await;
-            }
+        trace!("received {:?}", &event);
+        let result = match event {
+            DebouncedEvent::Create(p) => stream_store.load(p).await,
+            DebouncedEvent::Write(p) => stream_store.load(p).await,
             DebouncedEvent::Remove(p) => {
-                let _ = stream_store.removed(p).await;
+                stream_store.removed(p).await;
+                Some(())
             }
             DebouncedEvent::Rename(rem, add) => {
-                let _ = stream_store.removed(rem).await;
-                let _ = stream_store.load(add).await;
+                stream_store.removed(rem).await;
+                stream_store.load(add).await
             }
-            _ => (),
+            _ => Some(()),
+        };
+
+        if result.is_none() {
+            warn!("failed handling event");
         }
     }
 }

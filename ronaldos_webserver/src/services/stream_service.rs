@@ -8,8 +8,40 @@ use std::{fmt::Display, ops::Deref, path::PathBuf, sync::Arc};
 
 pub struct RecordingsService {
     stream_store: Arc<LocalStreamStore>,
+    dev_mode: bool,
 }
 
+impl RecordingsService {
+    pub fn new(stream_store: Arc<LocalStreamStore>, dev_mode: bool) -> Self {
+        RecordingsService {
+            stream_store,
+            dev_mode,
+        }
+    }
+
+    async fn test(&self) -> std::io::Result<http::Response<hyper::Body>> {
+        self.stream_store
+            .register(
+                StreamId::FootballAPI(1234),
+                vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
+                "this is a test".to_string(),
+                chrono::Utc::now(),
+            )
+            .await
+            .unwrap();
+
+        Ok(http::response::Builder::new()
+            .status(http::StatusCode::OK)
+            .body(Body::empty())
+            .unwrap())
+    }
+}
+
+impl Display for RecordingsService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "match recordings")
+    }
+}
 fn preflight_response() -> http::Response<Body> {
     http::Response::builder()
         .status(http::StatusCode::NO_CONTENT)
@@ -31,6 +63,7 @@ impl RequestHandler for RecordingsService {
             return Ok(preflight_response());
         }
         match request.uri().path()[1..].split_terminator('/').nth(1) {
+            Some("test") if self.dev_mode => self.test().await,
             Some("all") => as_json_response(&self.stream_store.get_all("streams").await),
             Some("untagged") => {
                 as_json_response(&self.stream_store.get_untagged_sources("streams").await)
@@ -61,17 +94,5 @@ impl RequestHandler for RecordingsService {
 
     fn path() -> &'static str {
         "streams"
-    }
-}
-
-impl RecordingsService {
-    pub fn new(stream_store: Arc<LocalStreamStore>) -> Self {
-        RecordingsService { stream_store }
-    }
-}
-
-impl Display for RecordingsService {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "match recordings")
     }
 }

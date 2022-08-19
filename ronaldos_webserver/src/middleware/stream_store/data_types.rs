@@ -13,11 +13,10 @@ pub struct MetaFile {
     pub id: StreamId,
     // stream can be in different formats and resolutions.
     pub filenames: Vec<PathBuf>,
-    // will be set to true explicitly by streaming encoder if the stream is
-    // actually live.
-    pub live: Option<bool>,
     // additional field to specify a custom title
-    pub title: Option<PathBuf>,
+    pub title: String,
+    #[serde(with = "ts_seconds")]
+    pub date: DateTime<Utc>,
 }
 
 impl MetaFile {
@@ -36,8 +35,9 @@ impl MetaFile {
                 Err(e) => error!("error retrieving metadata {}", e),
             }
             let typ = match path.extension().and_then(OsStr::to_str) {
-                Some("m3u8") => StreamingType::HLS,
+                Some("m3u8" | "m3u") => StreamingType::HLS,
                 Some("dash" | "mpd") => StreamingType::DASH,
+                Some("mp4") => StreamingType::MP4,
                 _ => return None,
             };
 
@@ -51,7 +51,9 @@ impl MetaFile {
             self.id,
             Stream {
                 sources,
-                live: self.live.unwrap_or_default(),
+                live: false,
+                title: self.title,
+                date: chrono::offset::Utc::now(),
             },
         ))
     }
@@ -69,12 +71,16 @@ pub struct Source {
 pub enum StreamingType {
     HLS,
     DASH,
+    MP4,
 }
 
-#[derive(Default, Serialize, Debug, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]
 pub struct Stream {
     pub sources: Vec<Source>,
     pub live: bool,
+    pub title: String,
+    #[serde(with = "ts_seconds")]
+    pub date: DateTime<Utc>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
