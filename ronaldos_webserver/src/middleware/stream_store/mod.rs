@@ -149,7 +149,7 @@ impl LocalStreamStore {
                             }
                         }
                     }
-                    _ => trace!("{} not of interest", path.to_string_lossy()),
+                    _ => debug!("{} not of interest", path.to_string_lossy()),
                 };
             } else {
                 error!("error opening {:?}", path);

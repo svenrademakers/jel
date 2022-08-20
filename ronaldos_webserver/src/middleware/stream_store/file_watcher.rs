@@ -16,7 +16,7 @@ impl LocalStreamStore {
             let (tx, rx) = std::sync::mpsc::channel();
             let mut file_watcher = notify::watcher(tx, Duration::from_secs(3)).unwrap();
             if file_watcher
-                .watch(&stream_store.root, RecursiveMode::Recursive)
+                .watch(&stream_store.root, RecursiveMode::NonRecursive)
                 .is_err()
             {
                 return;
