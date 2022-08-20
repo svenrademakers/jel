@@ -1,11 +1,18 @@
+import argparse
 import subprocess
 import os
 
+parser = argparse.ArgumentParser()
+parser.add_argument(dest='stream_name', help="name of the stream")
+parser.add_argument(dest='title', help="title of the stream")
+args = parser.parse_args()
+
+stream_name=args.stream_name
 input_device=" -i video=\"Game Capture HD60 S+\":audio=\"Digital Audio Interface (Game Capture HD60 S+)\""
-stream_name="rosengard_vs_piteo"
+
 cwd="Z:\\"
 
-cmd= f'ffmpeg -f dshow -rtbufsize 1024M  {input_device} -r 30   \
+cmd= f'ffmpeg -f dshow -rtbufsize 2048M  {input_device} -r 30   \
 -filter_complex \
 "[0:v]split=3[v1][v2][v3]; \
 [v1]format=yuv420p[v1out]; [v2]scale=w=1280:h=720, format=yuv420p [v2out]; [v3]scale=w=640:h=360, format=yuv420p[v3out]" \
