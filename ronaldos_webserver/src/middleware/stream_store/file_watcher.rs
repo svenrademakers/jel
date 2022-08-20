@@ -1,14 +1,16 @@
-use std::{
-    sync::{Arc, RwLock},
-    time::Duration,
-};
-
 use log::{debug, info, trace, warn};
 use notify::{DebouncedEvent, RecursiveMode, Watcher};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::sync::oneshot::Receiver;
 
 use super::LocalStreamStore;
-static EXIT: RwLock<bool> = RwLock::new(false);
+static EXIT: AtomicBool = AtomicBool::new(false);
 
 impl LocalStreamStore {
     pub(super) fn watch_for_changes(stream_store: Arc<LocalStreamStore>, kill_sig: Receiver<()>) {
@@ -27,7 +29,7 @@ impl LocalStreamStore {
                 &stream_store.root.to_string_lossy()
             );
 
-            while !*EXIT.read().unwrap() {
+            while !EXIT.load(Ordering::Relaxed) {
                 if let Ok(event) = rx.recv_timeout(Duration::from_secs(3)) {
                     tokio::spawn(Self::handle_debounce_event(stream_store.clone(), event));
                 }
@@ -39,7 +41,7 @@ impl LocalStreamStore {
         tokio::spawn(async move {
             let _ = kill_sig.await;
             debug!("exiting watcher");
-            *EXIT.write().unwrap() = true;
+            EXIT.store(true, Ordering::Relaxed);
         });
     }
 
@@ -50,17 +52,17 @@ impl LocalStreamStore {
             DebouncedEvent::Write(p) => stream_store.load(p).await,
             DebouncedEvent::Remove(p) => {
                 stream_store.removed(p).await;
-                Some(())
+                Ok(())
             }
             DebouncedEvent::Rename(rem, add) => {
                 stream_store.removed(rem).await;
                 stream_store.load(add).await
             }
-            _ => Some(()),
+            _ => Ok(()),
         };
 
-        if result.is_none() {
-            warn!("failed handling event");
+        if let Err(e) = result {
+            warn!("failed handling event: {}", e);
         }
     }
 }

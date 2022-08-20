@@ -1,13 +1,7 @@
 use std::{
-    char::MAX,
     collections::{hash_map::DefaultHasher, HashMap},
     hash::{Hash, Hasher},
-    io::{self, Write},
-    ops::{Deref, DerefMut},
-    path::Path,
-    sync::Arc,
 };
-use tokio::sync::RwLock;
 
 pub struct CacheController<K, V, const N: usize>
 where
@@ -55,7 +49,7 @@ where
     }
 
     pub fn get(&self) -> Option<&V> {
-       None
+        None
     }
 }
 

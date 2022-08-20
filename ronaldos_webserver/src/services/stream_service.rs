@@ -1,10 +1,17 @@
 use super::{as_json_response, lookup_content_type};
-use crate::middleware::{data_types::StreamId, LocalStreamStore};
+use crate::middleware::LocalStreamStore;
 use async_trait::async_trait;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
-use log::info;
-use std::{ffi::OsStr, fmt::Display, ops::Deref, path::PathBuf, sync::Arc};
+use std::{
+    fmt::Display,
+    ops::Deref,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 pub struct RecordingsService {
     stream_store: Arc<LocalStreamStore>,
@@ -20,11 +27,17 @@ impl RecordingsService {
     }
 
     async fn test(&self) -> std::io::Result<http::Response<hyper::Body>> {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let number = COUNTER.fetch_add(1, Ordering::SeqCst);
+
+        let test_name = format!("_test_stream_{}", number);
+        let test_description = format!("this is a test {}", number);
+
         self.stream_store
             .register(
-                StreamId::FootballAPI(1234),
+                test_name,
+                test_description,
                 vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
-                "this is a test".to_string(),
                 chrono::Utc::now(),
             )
             .await
@@ -66,12 +79,9 @@ impl RequestHandler for RecordingsService {
         let cursor = request.uri().path()[1..].find('/').unwrap() + 2;
         match &request.uri().path()[cursor..] {
             "test" if self.dev_mode => self.test().await,
-            "all" => as_json_response(&self.stream_store.get_all("streams").await),
-            "untagged" => {
-                as_json_response(&self.stream_store.get_untagged_sources("streams").await)
-            }
+            "all" => as_json_response(&self.stream_store.get_available_streams("streams").await),
             file => {
-                let data = self.stream_store.get_source(file).await.unwrap();
+                let data = self.stream_store.get_segment(file).await.unwrap();
                 let mut response = http::response::Builder::new()
                     .header(http::header::CACHE_CONTROL, "no-cache")
                     .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "'*' always")

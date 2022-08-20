@@ -1,111 +1,81 @@
 use chrono::{serde::ts_seconds, DateTime, Utc};
-use log::{debug, error};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
+    io::{BufRead, BufReader},
     path::{Path, PathBuf, StripPrefixError},
 };
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct MetaFile {
-    // unique id to identify stream. assumed can be that id == football-api
-    // fixture id. otherwise id depicts a custom stream
-    pub id: StreamId,
-    // stream can be in different formats and resolutions.
+pub(super) struct MetaFile {
+    // Stream can be in different formats and resolutions. Usually we make use
+    // of one "master playlist" so typically only one source is ossociated with
+    // a stream.
     pub filenames: Vec<PathBuf>,
     // additional field to specify a custom title
-    pub title: String,
+    pub description: String,
     #[serde(with = "ts_seconds")]
     pub date: DateTime<Utc>,
 }
 
-impl MetaFile {
-    pub async fn into_metadata(self, root: &Path) -> Option<(StreamId, Stream)> {
+impl From<MetaFile> for Stream {
+    fn from(meta: MetaFile) -> Self {
         let mut sources = Vec::new();
-        for path in self.filenames {
-            let mut created = std::time::UNIX_EPOCH;
-            match tokio::fs::metadata(root.join(&path))
-                .await
-                .and_then(|meta| meta.created())
-            {
-                Ok(time) => created = time,
-                Err(ref e) if e.kind() == std::io::ErrorKind::Unsupported => {
-                    debug!("created call not supported by platform");
-                }
-                Err(e) => error!("error retrieving metadata {}", e),
-            }
+        let mut live = false;
+        for path in meta.filenames {
             let typ = match path.extension().and_then(OsStr::to_str) {
-                Some("m3u8" | "m3u") => StreamingType::HLS,
-                Some("dash" | "mpd") => StreamingType::DASH,
-                Some("mp4") => StreamingType::MP4,
-                _ => return None,
+                Some("m3u8" | "m3u") => "application/x-mpegURL",
+                Some("dash" | "mpd") => "application/dash+xml",
+                Some("mp4") => "video/mp4",
+                x => panic!("cannot map {:?} to MIME type", x),
             };
-
+            live |= is_live_stream(&path, typ).is_some();
             sources.push(Source {
-                typ,
-                url: path.to_path_buf(),
-                created: created.into(),
+                typ: typ.into(),
+                url: path,
             });
         }
-        Some((
-            self.id,
-            Stream {
-                sources,
-                live: false,
-                title: self.title,
-                date: chrono::offset::Utc::now(),
-            },
-        ))
+
+        Stream {
+            sources,
+            live,
+            description: meta.description,
+            date: meta.date,
+        }
     }
+}
+
+fn is_live_stream(path: &Path, typ: &'static str) -> Option<()> {
+    if typ != "application/x-mpegURL" {
+        return None;
+    }
+
+    let mut m3u8 = std::fs::File::open(path).ok()?;
+    let reader = BufReader::new(m3u8);
+
+    for line in reader.lines() {
+        if line.ok()?.contains("#EXT-X-PLAYLIST-TYPE:VOD") {
+            return None;
+        }
+    }
+
+    Some(())
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]
 pub struct Source {
     pub url: PathBuf,
-    pub typ: StreamingType,
-    #[serde(with = "ts_seconds")]
-    pub created: DateTime<Utc>,
-}
-
-#[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]
-pub enum StreamingType {
-    HLS,
-    DASH,
-    MP4,
+    pub typ: String,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]
 pub struct Stream {
     pub sources: Vec<Source>,
-    pub live: bool,
-    pub title: String,
+    pub description: String,
     #[serde(with = "ts_seconds")]
     pub date: DateTime<Utc>,
-}
-
-#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum StreamId {
-    FootballAPI(u32),
-    Untagged(u32),
-    None,
-}
-
-impl StreamId {
-    const INVALID_KEY: u32 = 0;
-    pub fn get_raw_key(&self) -> Option<u32> {
-        let key = match self {
-            StreamId::FootballAPI(key) => key,
-            StreamId::Untagged(key) => key,
-            StreamId::None => return None,
-        };
-        Some(*key)
-    }
-}
-
-impl Default for StreamId {
-    fn default() -> Self {
-        StreamId::Untagged(StreamId::INVALID_KEY)
-    }
+    pub live: bool,
 }
 
 impl Stream {

@@ -8,6 +8,7 @@ use crate::middleware::{FootballInfo, LocalStreamStore};
 
 use super::as_json_response;
 
+#[allow(dead_code)]
 pub struct FixtureService {
     football_info: Arc<dyn FootballInfo>,
     recordings: Arc<LocalStreamStore>,
@@ -25,7 +26,7 @@ impl FixtureService {
 #[async_trait]
 impl RequestHandler for FixtureService {
     async fn invoke(&self, _: http::Request<Body>) -> std::io::Result<http::Response<Body>> {
-        let mut fixtures = self
+        let fixtures = self
             .football_info
             .fixtures("2022")
             .await
@@ -33,14 +34,15 @@ impl RequestHandler for FixtureService {
             .map(|x| (x.fixture_id, serde_json::to_value(&x).unwrap()))
             .collect::<BTreeMap<u32, Value>>();
 
-        for stream in self.recordings.get_fixtures(FixtureService::path()).await {
-            if let Some(Some(attributes)) = fixtures
-                .get_mut(&stream.0)
-                .map(serde_json::Value::as_object_mut)
-            {
-                attributes.insert("source".to_string(), serde_json::to_value(&stream).unwrap());
-            }
-        }
+        // TODO
+        // for stream in self.recordings.get_fixtures(FixtureService::path()).await {
+        //     if let Some(Some(attributes)) = fixtures
+        //         .get_mut(&stream.0)
+        //         .map(serde_json::Value::as_object_mut)
+        //     {
+        //         attributes.insert("source".to_string(), serde_json::to_value(&stream).unwrap());
+        //     }
+        // }
         as_json_response(&fixtures)
     }
 
