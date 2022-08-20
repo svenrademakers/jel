@@ -73,13 +73,16 @@ $(document).ready(function () {
     var player = videojs('video_player', {
         autoplay: true,
         liveui: false,
-        inactivityTimeout: 0,
     }, function () {
         videojs.log("player loaded", this.currentSrc());
     });
 })
 function set_video_src(url) {
     var video = videojs("video_player");
+    video.src( {
+        type: "application/x-mpegURL",
+        src: url,
+    });
     video.src(url);
 }
 function load_schedule_table(x) {

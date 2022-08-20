@@ -106,10 +106,6 @@ impl LocalStreamStore {
         pin_mut!(stream_iter);
         let mut recordings_map = self.store.write().await;
         while let Some((key, stream)) = stream_iter.next().await {
-            if let Some(value) = recordings_map.get(&key) {
-                error!("skipping {:?}{:?}, duplicate of {:?}", key, stream, value);
-                continue;
-            }
             recordings_map.insert(key, stream);
         }
 
@@ -153,19 +149,14 @@ impl LocalStreamStore {
                             }
                         }
                     }
-                    Some(ext) => {
-                        if LocalStreamStore::FILTERED_EXTENSIONS.contains(&ext) {
-                            loose_files.insert(relative, StreamId::None);
-                        }
-                    }
-                    _ => debug!("{} not of interest", path.to_string_lossy()),
+                    _ => trace!("{} not of interest", path.to_string_lossy()),
                 };
             } else {
                 error!("error opening {:?}", path);
             }
         };
 
-        debug!("scanning: {:?}", &path);
+        trace!("scanning: {:?}", &path);
         let md = tokio::fs::metadata(path).await?;
         if md.is_file() {
             load_file(path);
