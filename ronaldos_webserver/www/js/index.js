@@ -71,6 +71,13 @@ $(document).ready(function () {
 
     });
     var player = videojs('video_player', {
+        html5: {
+            hls: {
+            overrideNative: true
+            },
+            nativeAudioTracks: false,
+            nativeVideoTracks: false
+           },
         autoplay: true,
         liveui: false,
     }, function () {
