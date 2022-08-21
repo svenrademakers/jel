@@ -3,7 +3,6 @@ use log::error;
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
-    io::{BufRead, BufReader},
     path::{Path, PathBuf, StripPrefixError},
 };
 
@@ -17,6 +16,7 @@ pub(super) struct MetaFile {
     pub description: String,
     #[serde(with = "ts_seconds")]
     pub date: DateTime<Utc>,
+    pub live : Option<bool>,
 }
 
 impl From<MetaFile> for Stream {
@@ -30,7 +30,6 @@ impl From<MetaFile> for Stream {
                 Some("mp4") => "video/mp4",
                 x => panic!("cannot map {:?} to MIME type", x),
             };
-            live |= is_live_stream(&path, typ).is_some();
             sources.push(Source {
                 typ: typ.into(),
                 url: path,
@@ -39,28 +38,11 @@ impl From<MetaFile> for Stream {
 
         Stream {
             sources,
-            live,
+            live : meta.live.unwrap_or_default(),
             description: meta.description,
             date: meta.date,
         }
     }
-}
-
-fn is_live_stream(path: &Path, typ: &'static str) -> Option<()> {
-    if typ != "application/x-mpegURL" {
-        return None;
-    }
-
-    let mut m3u8 = std::fs::File::open(path).ok()?;
-    let reader = BufReader::new(m3u8);
-
-    for line in reader.lines() {
-        if line.ok()?.contains("#EXT-X-PLAYLIST-TYPE:VOD") {
-            return None;
-        }
-    }
-
-    Some(())
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]

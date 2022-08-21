@@ -47,6 +47,7 @@ class Match {
     }
 }
 
+streams = []
 $(document).ready(function () {
     // $.get("fixtures", function (data) {
     //     fixtures = data;
@@ -55,16 +56,27 @@ $(document).ready(function () {
     //     load_schedule_table(x);
     // });
 
-    $.get("streams/all", function(data) {
-        console.log(JSON.stringify(data));
+    $.get("streams/all", function (data) {
+        streams = data;
         let output = "";
-        for (const [key, value] of Object.entries(data)) {
-            output += "<tr>";
+        for (const value of streams) {
+            let btn_style = "btn-outline-primary";
+            let btn_text = "Watch";
+
+            if (value["live"]) {
+                btn_style = "btn-outline-danger";
+                btn_text = "Live";
+                output += "<tr class='table-active'>";
+            } else {
+                output += "<tr>";
+            }
+
             let date = new Date(0);
             date.setUTCSeconds(value["date"]);
-            output += "<td>" + $.format.date(date, "D MMM yyyy") + "</td>";
+            output += "<td scope='col'>" + $.format.date(date, "D MMM yyyy") + "</td>";
             output += "<td>" + value["description"] + "</td>";
-            output += "<td><button type=\"button\" onclick=\"set_video_src('" + value["sources"][0]["url"] + "', '"+value["description"]+"')\" class=\"btn btn-outline-primary\">Watch</button></td>";
+
+            output += "<td><button type=\"button\" onclick=\"start_video('" + streams.indexOf(value) + "')\" class=\"btn " + btn_style + " \">" + btn_text + "</button></td>";
             output += "<tr>"
         }
         $("#schedule_table").html(output);
@@ -72,27 +84,46 @@ $(document).ready(function () {
     });
     var player = videojs('video_player', {
         html5: {
-            hls: {
-            overrideNative: true
+            vhs: {
+                overrideNative: true
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false
-           },
+        },
         autoplay: true,
         liveui: false,
     }, function () {
         videojs.log("player loaded", this.currentSrc());
     });
 })
-function set_video_src(url, title) {
-    $("#current_title").text(title);
+
+
+function start_video(stream_id) {
+    const stream = streams[stream_id];
+    $("#current_title").text(stream["description"]);
+    console.log(stream);
+
+    if (stream["live"]) {
+        $("#current_title").append("\t<span class=\"badge badge-danger\">Live</span>");
+    }
+
     var video = videojs("video_player");
-    video.src( {
-        type: "application/x-mpegURL",
-        src: url,
-    });
-    video.src(url);
+    let sources = []
+    for (const source of stream["sources"]) {
+        sources.push({
+            type: source["typ"],
+            src: source["url"],
+        });
+    }
+    video.src(sources);
+    video.play();
+
+    if ($("#video-container").css('display') == 'none') {
+        $("#video-container").fadeIn("slow");
+    }
+
 }
+
 function load_schedule_table(x) {
     const index = Object.keys(fixtures).findIndex(k => k === x);
     let output = "";
@@ -130,18 +161,10 @@ function upcoming_fixture() {
     }
 }
 
-function has_watch(fixt_id) {
-    // return file_exists("matches/hls/".fixt_id.
-    //         ".m3u8") ||
-    //     file_exists("matches/dash/".fixt_id.
-    //         ".mpd");
-    return false;
-}
-
 function set_current_fixture(match) {
     let fixture = new Match(match);
     $("#current_title").text(fixture.home + " - " + fixture.away);
-      // let start = new Date(0);
+    // let start = new Date(0);
     // start.setUTCSeconds(fixtures[match]["timestamp"]);
     // start.setMinutes(start.getMinutes() - 15);
 

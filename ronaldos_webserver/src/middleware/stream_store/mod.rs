@@ -222,6 +222,7 @@ impl LocalStreamStore {
             filenames: sources,
             description,
             date,
+            live: Some(true),
         };
 
         let as_str = serde_yaml::to_string(&registration).map_err(RegisterError::ParseError)?;
