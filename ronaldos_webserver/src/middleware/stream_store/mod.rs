@@ -186,7 +186,9 @@ impl LocalStreamStore {
 
     pub async fn get_available_streams(&self, prefix: &'static str) -> Vec<Stream> {
         let map = self.stream_map.read().await;
-        prepend_prefix(map.values().cloned(), prefix).collect()
+        let mut res : Vec<Stream> = prepend_prefix(map.values().cloned(), prefix).collect();
+        res.sort_by(|a,b|a.date.cmp(&b.date));
+        res
     }
 
     /// registers a new fixture

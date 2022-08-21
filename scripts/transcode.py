@@ -4,13 +4,20 @@ import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument(dest='stream_name', help="name of the stream")
-parser.add_argument(dest='title', help="title of the stream")
+parser.add_argument(dest='description', help="title of the stream")
+parser.add_argument('-cwd', nargs='?', default="Z:\\")
+parser.add_argument('-d', "--datestamp", nargs='?', default=None)
+
 args = parser.parse_args()
 
+cwd= args.cwd
 stream_name=args.stream_name
 input_device=" -i video=\"Game Capture HD60 S+\":audio=\"Digital Audio Interface (Game Capture HD60 S+)\""
 
-cwd="Z:\\"
+# if args.date is None:
+#     date = datetime.datetime.now()
+# else:
+#     date = Date.parse(args.datestamp)
 
 cmd= f'ffmpeg -f dshow -rtbufsize 2048M  {input_device} -r 30   \
 -filter_complex \

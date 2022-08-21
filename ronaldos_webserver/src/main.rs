@@ -6,6 +6,7 @@ mod services;
 use crate::middleware::{FootballApi, LocalStreamStore};
 use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
 use clap::{ArgEnum, Parser};
+#[cfg(not(windows))]
 use daemonize::Daemonize;
 use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
@@ -45,6 +46,7 @@ fn main() -> io::Result<()> {
     };
     init_log(log_level);
 
+    #[cfg(not(windows))]
     if let Some(option) = cli.daemon {
         let _ = daemonize(option).ok_or(Error::new(ErrorKind::Other, "fatal"))?;
     }
@@ -93,6 +95,7 @@ async fn application_main(config: Config) -> Result<(), Error> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn daemonize(option: DeamonAction) -> Option<()> {
     const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
     std::fs::create_dir_all(STDOUT).unwrap();

@@ -63,8 +63,8 @@ $(document).ready(function () {
             let date = new Date(0);
             date.setUTCSeconds(value["date"]);
             output += "<td>" + $.format.date(date, "D MMM yyyy") + "</td>";
-            output += "<td>" + value["title"] + "</td>";
-            output += "<td><button type=\"button\" onclick=\"set_video_src('" + value["sources"][0]["url"] + "')\" class=\"btn btn-outline-primary\">Watch</button></td>";
+            output += "<td>" + value["description"] + "</td>";
+            output += "<td><button type=\"button\" onclick=\"set_video_src('" + value["sources"][0]["url"] + "', '"+value["description"]+"')\" class=\"btn btn-outline-primary\">Watch</button></td>";
             output += "<tr>"
         }
         $("#schedule_table").html(output);
@@ -84,7 +84,8 @@ $(document).ready(function () {
         videojs.log("player loaded", this.currentSrc());
     });
 })
-function set_video_src(url) {
+function set_video_src(url, title) {
+    $("#current_title").text(title);
     var video = videojs("video_player");
     video.src( {
         type: "application/x-mpegURL",
