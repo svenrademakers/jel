@@ -13,14 +13,14 @@ use std::{
     },
 };
 
-pub struct RecordingsService {
+pub struct StreamsService {
     stream_store: Arc<LocalStreamStore>,
     dev_mode: bool,
 }
 
-impl RecordingsService {
+impl StreamsService {
     pub fn new(stream_store: Arc<LocalStreamStore>, dev_mode: bool) -> Self {
-        RecordingsService {
+        StreamsService {
             stream_store,
             dev_mode,
         }
@@ -30,12 +30,10 @@ impl RecordingsService {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let number = COUNTER.fetch_add(1, Ordering::SeqCst);
 
-        let test_name = format!("test_stream_{}", number);
         let test_description = format!("this is a test {}", number);
 
         self.stream_store
             .register(
-                test_name,
                 test_description,
                 vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
                 chrono::Utc::now(),
@@ -50,11 +48,12 @@ impl RecordingsService {
     }
 }
 
-impl Display for RecordingsService {
+impl Display for StreamsService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "match recordings")
+        write!(f, "Stream Service")
     }
 }
+
 fn preflight_response() -> http::Response<Body> {
     http::Response::builder()
         .status(http::StatusCode::NO_CONTENT)
@@ -67,7 +66,7 @@ fn preflight_response() -> http::Response<Body> {
 }
 
 #[async_trait]
-impl RequestHandler for RecordingsService {
+impl RequestHandler for StreamsService {
     async fn invoke(
         &self,
         request: http::Request<hyper::Body>,

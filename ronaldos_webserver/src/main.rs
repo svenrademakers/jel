@@ -4,7 +4,7 @@ mod root_service;
 mod services;
 
 use crate::middleware::{FootballApi, LocalStreamStore};
-use crate::services::{FileService, FixtureService, RecordingsService, SessionMananger};
+use crate::services::{FileService, FixtureService, StreamsService, SessionMananger};
 use clap::{ArgEnum, Parser};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
@@ -76,7 +76,7 @@ async fn application_main(config: Config) -> Result<(), Error> {
     let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
     service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
     service_context.append_service(FileService::new(config.www_dir()).await?);
-    service_context.append_service(RecordingsService::new(recordings_disk, *config.verbose()));
+    service_context.append_service(StreamsService::new(recordings_disk, *config.verbose()));
     let address = format!("{}:{}", config.host(), config.port())
         .parse()
         .unwrap();

@@ -1,6 +1,6 @@
 [package]
 name = "ronaldos-webserver"
-version = "0.2.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
 description = "Rust https server including ronaldo's own specific http services"
@@ -26,6 +26,7 @@ hyper_rusttls = { path= "../hyper_rusttls" }
 chrono = { version = "*", features = ["serde"] }
 regex = "*"
 notify = "*"
+uuid = { version= "*", features = ["v4", "serde"] }
 
 [target.'cfg(not(windows))'.dependencies]
 daemonize = "*"

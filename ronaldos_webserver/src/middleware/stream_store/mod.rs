@@ -4,7 +4,6 @@ mod file_watcher;
 use self::data_types::*;
 use super::cache_map::CacheController;
 use chrono::{DateTime, Utc};
-use futures_util::StreamExt;
 use log::{debug, error, info, trace, warn};
 use std::{
     collections::BTreeMap,
@@ -14,9 +13,10 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 /// Provides video streams that are persisted on the filesystem. Even given they
-/// are written real-time. At the moment there is support for the followin
+/// are written real-time. At the moment there is support for the following
 /// formats:
 /// * HLS
 /// * DASH
@@ -28,8 +28,8 @@ use tokio::sync::RwLock;
 /// # Ajustable Bitrate
 ///
 /// Currently we assume that streams are provided in 3 levels of quality, to
-/// accomodate most bandwith capabilities of clients watching theses streams. To
-/// accomodate for this as best as possible we have 3 caches for each level, so
+/// accommodate most bandwidth capabilities of clients watching theses streams. To
+/// accommodate for this as best as possible we have 3 caches for each level, so
 /// we keep the amount of memory allocations at a minimum
 pub struct LocalStreamStore {
     /// Directory which all stream files will be written to. All paths used in
@@ -37,7 +37,8 @@ pub struct LocalStreamStore {
     root: PathBuf,
     /// Map that contains the index of found streams. This is the single source
     /// of truth.
-    stream_map: RwLock<BTreeMap<String, Stream>>,
+    stream_map: RwLock<BTreeMap<Uuid, Stream>>,
+    uuid_lookup: RwLock<BTreeMap<PathBuf, Uuid>>,
     /// 3 way cache, caching streams optimized for the 3 different bitrate levels.
     file_cache: RwLock<CacheController<Path, Arc<Vec<u8>>, 128>>,
     /// This watcher object is used to exit the watcher task.
@@ -54,6 +55,7 @@ impl LocalStreamStore {
         Arc::new(LocalStreamStore {
             root: root.to_path_buf(),
             stream_map: RwLock::new(BTreeMap::default()),
+            uuid_lookup: RwLock::new(BTreeMap::default()),
             file_cache: RwLock::new(CacheController::new()),
             watcher_sender: None,
         })
@@ -82,18 +84,27 @@ impl LocalStreamStore {
     /// Load a .stream meta file from disk. path can be a directory or a file.
     /// note that recursive scanning is disabled. see [LocalStreamStore::scan]
     async fn load(&self, path: PathBuf) -> std::io::Result<()> {
-        let new_meta_files = tokio_stream::iter(self.scan(&path).await?)
-            .map(|(p, meta)| (p, meta.into()))
-            .collect::<Vec<(String, Stream)>>()
-            .await;
+        let mut lookup = Vec::new();
+        let new_meta_files = self
+            .scan(&path)
+            .await?
+            .map(|(p, meta)| {
+                lookup.push((p, meta.uuid));
+                (meta.uuid, meta.into())
+            })
+            .collect::<Vec<(Uuid, Stream)>>();
 
+        self.uuid_lookup.write().await.extend(lookup);
         self.stream_map.write().await.extend(new_meta_files);
         Ok(())
     }
 
     /// Scans for .stream files in a given path none recursively. If path is not a
     /// sub directory of root, None is returned.
-    async fn scan(&self, path: &Path) -> std::io::Result<impl Iterator<Item = (String, MetaFile)>> {
+    async fn scan(
+        &self,
+        path: &Path,
+    ) -> std::io::Result<impl Iterator<Item = (PathBuf, MetaFile)>> {
         if !path.starts_with(&self.root) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -132,7 +143,7 @@ impl LocalStreamStore {
         Ok(found.into_iter())
     }
 
-    fn parse_file(&self, path: &Path) -> Option<(String, MetaFile)> {
+    fn parse_file(&self, path: &Path) -> Option<(PathBuf, MetaFile)> {
         if path.ends_with("stream") {
             return None;
         }
@@ -143,24 +154,16 @@ impl LocalStreamStore {
             .to_path_buf();
         trace!("scanning {}", relative.to_string_lossy());
 
-        let file;
-        match std::fs::File::open(path) {
-            Ok(f) => file = f,
+        let file = match std::fs::File::open(path) {
+            Ok(f) => f,
             Err(e) => {
                 error!("error opening {:?}: {}", path, e);
                 return None;
             }
-        }
+        };
+
         match serde_yaml::from_reader::<std::fs::File, MetaFile>(file) {
-            Ok(stream) => {
-                let stem = String::from(
-                    path.file_stem()
-                        .expect("not curropted file_stem")
-                        .to_str()
-                        .unwrap(),
-                );
-                Some((stem, stream.into()))
-            }
+            Ok(stream) => Some((path.to_path_buf(), stream)),
             Err(e) => {
                 error!("could not parse {} {}", path.to_string_lossy(), e);
                 None
@@ -173,39 +176,48 @@ impl LocalStreamStore {
             return false;
         }
 
-        let key = path
-            .file_stem()
-            .expect("path should reside in the root directory")
-            .to_str()
-            .unwrap();
-        let removed = self.stream_map.write().await.remove(key).is_some();
-        debug!("removed {} from cache", path.to_string_lossy());
+        let lookup = self.uuid_lookup.read().await;
+        let uuid = match lookup.get(&path) {
+            Some(val) => val,
+            None => {
+                warn!("uuid bookkeeping out of sync");
+                return false;
+            }
+        };
+
+        let removed = self.stream_map.write().await.remove(uuid).is_some();
+        debug!("removed {} {} from cache", path.to_string_lossy(), uuid);
         removed
     }
 
     /// Returns a list of all available streams ready for playback sorted by on
     /// most recent date first. Note that even though they are available, the
-    /// actual sources might be offline for what reason. 
-    /// 
+    /// actual sources might be offline for what reason.
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `prefix` prefixes all urls contained in the [Stream] Vector with the
     ///   given argument
-    /// 
+    ///
     /// # Return
-    /// 
+    ///
     /// vector of registered streams
-    pub async fn get_available_streams(&self, prefix: &'static str) -> Vec<Stream> {
-        let map = self.stream_map.read().await;
-        let mut res : Vec<Stream> = prepend_prefix(map.values().cloned(), prefix).collect();
-        res.sort_by(|a,b|b.date.cmp(&a.date));
-        res
+    pub async fn get_available_streams(&self, prefix: &'static str) -> Vec< Stream> {
+        let mut map: Vec<Stream> = self
+            .stream_map
+            .read()
+            .await
+            .values().cloned()
+            .map(|s|  prepend_prefix(s, prefix))
+            .collect();
+
+        map.sort_by(|a, b| b.date.cmp(&a.date));
+        map
     }
 
     /// registers a new fixture
     pub async fn register(
         &self,
-        name: String,
         description: String,
         sources: Vec<PathBuf>,
         date: DateTime<Utc>,
@@ -214,24 +226,23 @@ impl LocalStreamStore {
             return Err(RegisterError::SourceArgumentEmpty);
         }
 
-        if let Some(entry) = self.stream_map.read().await.get(&name) {
-            return Err(RegisterError::IdAlreadyRegisteredTo(entry.clone()));
-        }
+        let new_uuid = Uuid::new_v4();
 
         let registration = MetaFile {
-            filenames: sources,
+            uuid: new_uuid,
+            sources,
             description,
             date,
             live: Some(true),
         };
 
         let as_str = serde_yaml::to_string(&registration).map_err(RegisterError::ParseError)?;
-        let name = format!("{}.stream", name);
+        let name = format!("{}.stream", new_uuid);
 
         let file_name = self.root.join(name);
         tokio::fs::write(&file_name, as_str.as_bytes())
             .await
-            .map_err(|e| RegisterError::IoError(e))?;
+            .map_err(RegisterError::IoError)?;
 
         info!("created {}", file_name.to_string_lossy(),);
         Ok(())
@@ -258,18 +269,13 @@ impl LocalStreamStore {
 }
 
 /// Adds a given url as prefix to the current base url. This base url is
-fn prepend_prefix<T: Iterator<Item = Stream>>(
-    iter: T,
-    prefix: &'static str,
-) -> impl Iterator<Item = Stream> {
-    iter.map(move |mut stream| {
-        for source in stream.sources.iter_mut() {
-            let full = PathBuf::from(prefix).join(source.url.clone());
-            source.url = full;
-        }
+fn prepend_prefix(mut stream: Stream, prefix: &'static str) -> Stream {
+    for source in stream.sources.iter_mut() {
+        let full = PathBuf::from(prefix).join(source.url.clone());
+        source.url = full;
+    }
 
-        stream
-    })
+    stream
 }
 
 #[cfg(test)]
