@@ -107,7 +107,7 @@ impl LocalStreamStore {
         trace!("scanning: {:?}", &path);
 
         let mut found = Vec::new();
-        let mut push_found = |path| {
+        let mut push_found = |path: &Path| {
             if let Some(tuple) = self.parse_file(path) {
                 found.push(tuple);
             }
@@ -119,8 +119,7 @@ impl LocalStreamStore {
         } else {
             let mut dir_entry = tokio::fs::read_dir(path).await?;
             while let Ok(Some(entry)) = dir_entry.next_entry().await {
-                let p = entry.path();
-                push_found(&p);
+                push_found(&entry.path());
             }
         }
 
@@ -199,7 +198,7 @@ impl LocalStreamStore {
     pub async fn get_available_streams(&self, prefix: &'static str) -> Vec<Stream> {
         let map = self.stream_map.read().await;
         let mut res : Vec<Stream> = prepend_prefix(map.values().cloned(), prefix).collect();
-        res.sort_by(|a,b|a.date.cmp(&b.date));
+        res.sort_by(|a,b|b.date.cmp(&a.date));
         res
     }
 
