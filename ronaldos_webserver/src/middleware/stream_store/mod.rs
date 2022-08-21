@@ -45,7 +45,6 @@ pub struct LocalStreamStore {
 }
 
 impl LocalStreamStore {
-    const FILTERED_EXTENSIONS: [&'static str; 3] = ["dash", "m3u8", "mpd"];
     pub async fn new(root: &Path) -> Arc<LocalStreamStore> {
         if !root.exists() {
             warn!("creating {}, does not exist", root.to_string_lossy());
@@ -120,7 +119,7 @@ impl LocalStreamStore {
         } else {
             let mut dir_entry = tokio::fs::read_dir(path).await?;
             while let Ok(Some(entry)) = dir_entry.next_entry().await {
-                push_found(path);
+                push_found(&entry.path());
             }
         }
 
@@ -184,6 +183,18 @@ impl LocalStreamStore {
         removed
     }
 
+    /// Returns a list of all available streams ready for playback sorted by on
+    /// most recent date first. Note that even though they are available, the
+    /// actual sources might be offline for what reason. 
+    /// 
+    /// # Arguments
+    /// 
+    /// * `prefix` prefixes all urls contained in the [Stream] Vector with the
+    ///   given argument
+    /// 
+    /// # Return
+    /// 
+    /// vector of registered streams
     pub async fn get_available_streams(&self, prefix: &'static str) -> Vec<Stream> {
         let map = self.stream_map.read().await;
         let mut res : Vec<Stream> = prepend_prefix(map.values().cloned(), prefix).collect();

@@ -30,7 +30,7 @@ impl RecordingsService {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let number = COUNTER.fetch_add(1, Ordering::SeqCst);
 
-        let test_name = format!("_test_stream_{}", number);
+        let test_name = format!("test_stream_{}", number);
         let test_description = format!("this is a test {}", number);
 
         self.stream_store
