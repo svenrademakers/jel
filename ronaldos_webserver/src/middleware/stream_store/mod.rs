@@ -119,7 +119,8 @@ impl LocalStreamStore {
         } else {
             let mut dir_entry = tokio::fs::read_dir(path).await?;
             while let Ok(Some(entry)) = dir_entry.next_entry().await {
-                push_found(&entry.path());
+                let p = entry.path();
+                push_found(&p);
             }
         }
 
