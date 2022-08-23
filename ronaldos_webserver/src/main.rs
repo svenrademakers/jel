@@ -48,7 +48,7 @@ fn main() -> io::Result<()> {
 
     #[cfg(not(windows))]
     if let Some(option) = cli.daemon {
-        let _ = daemonize(option).ok_or(Error::new(ErrorKind::Other, "fatal"))?;
+        daemonize(option).ok_or(Error::new(ErrorKind::Other, "fatal"))?;
     }
 
     let rt = tokio::runtime::Runtime::new()?;
@@ -80,7 +80,7 @@ async fn application_main(config: Config) -> Result<(), Error> {
     let address = format!("{}:{}", config.host(), config.port())
         .parse()
         .unwrap();
-    let tls_cfg = load_server_config(&config.certificates(), &config.private_key());
+    let tls_cfg = load_server_config(config.certificates(), config.private_key());
 
     if let Err(e) = run_server(
         Arc::new(service_context),
