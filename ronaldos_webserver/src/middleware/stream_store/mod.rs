@@ -281,7 +281,6 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::logger::init_log;
     use tempdir::TempDir;
 
     fn assert_stream(mut a: Stream, mut b: Stream) {
@@ -292,8 +291,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_scan() {
-        init_log(log::Level::Debug);
-
         let temp = TempDir::new("test").unwrap();
         let stream_store = LocalStreamStore::new(temp.path()).await;
         assert_eq!(0, stream_store.scan(temp.path()).await.unwrap().count());
