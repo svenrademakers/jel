@@ -1,15 +1,14 @@
-use async_trait::async_trait;
+use anyhow::{Context, Result};
+use bytes::Bytes;
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use http::{Request, Uri};
-use hyper::{Body, Client};
+use hyper::{body, Body, Client};
 use hyper_rusttls::https_connector::HttpsConnector;
-use log::{debug, error};
+use log::debug;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::{collections::BTreeMap, error::Error, str::FromStr, sync::Arc};
+use serde_json::{json, Value};
+use std::{collections::BTreeMap, io::Write, str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
-
-use super::LocalStreamStore;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Fixture {
@@ -21,70 +20,55 @@ pub struct Fixture {
     #[serde(with = "ts_seconds")]
     timestamp: DateTime<Utc>,
 }
-
-#[async_trait]
-pub trait FootballInfo: Send + Sync {
-    async fn fixtures(&self, season: &str) -> Vec<Fixture>;
-}
-
 #[allow(dead_code)]
 pub struct FootballApi {
-    data: RwLock<BTreeMap<String, Fixture>>,
+    /// map of league name as key and Fixture as item
+    cache: RwLock<BTreeMap<String, Vec<Value>>>,
     url: http::uri::Uri,
     api_key: String,
-    recordings: Arc<LocalStreamStore>,
 }
 
 impl FootballApi {
-    pub async fn new(
-        season: &str,
-        team: &str,
-        api_key: String,
-        recordings: Arc<LocalStreamStore>,
-    ) -> Self {
+    pub async fn new(season: &str, team: &str, api_key: String) -> Arc<Self> {
         let api_uri = http::Uri::from_str(&format!(
             "https://api-football-v1.p.rapidapi.com/v3/fixtures?season={}&team={}",
             season, team
         ))
         .unwrap();
 
-        let raw = load_from_football_api(&api_uri, &api_key)
-            .await
-            .unwrap_or_default();
-        let data = load(&raw).await.unwrap_or_default();
-
-        FootballApi {
-            data: RwLock::new(data),
+        let instance = Arc::new(FootballApi {
+            cache: RwLock::new(BTreeMap::new()),
             url: api_uri,
             api_key,
-            recordings,
+        });
+
+        instance
+    }
+
+    pub async fn fixtures<T: Write>(&self, writer: &mut T) -> Result<()> {
+        let mut write_cache = self.cache.write().await;
+        // load cache on first request
+        if write_cache.is_empty() {
+            debug!("cache not loaded yet, sending football request");
+            let raw = football_api_request(&self.url, &self.api_key).await?;
+            let mut map = to_data_model(raw).await?;
+            write_cache.append(&mut map);
         }
+
+        let str = serde_json::to_string(&*write_cache)?;
+        writer.write_all(str.as_bytes())?;
+        Ok(())
     }
 }
 
-#[async_trait]
-impl FootballInfo for FootballApi {
-    async fn fixtures(&self, season: &str) -> Vec<Fixture> {
-        if season == "2022" {
-            self.data.read().await.values().cloned().collect()
-        } else {
-            Vec::new()
-        }
-    }
-}
+async fn to_data_model(bytes: Bytes) -> Result<BTreeMap<String, Vec<Value>>> {
+    let json: serde_json::Value = serde_json::from_slice(&bytes)?;
 
-async fn load(str: &str) -> Result<BTreeMap<String, Fixture>, Box<dyn Error>> {
-    let json: serde_json::Value = serde_json::from_str(&str)?;
-    if let Some(msg) = json.get("message") {
-        error!("{}", msg);
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "",
-        )));
-    }
-
-    let mut fixtures = BTreeMap::new();
-    for fixt in json["response"].as_array().unwrap() {
+    let mut fixtures: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    for fixt in json["response"]
+        .as_array()
+        .with_context(|| format!("response: {}", json))?
+    {
         let score;
         if fixt["goals"]["home"] == json!(null) || fixt["goals"]["away"] == json!(null) {
             score = "".to_string();
@@ -99,18 +83,17 @@ async fn load(str: &str) -> Result<BTreeMap<String, Fixture>, Box<dyn Error>> {
             "score" : score,
             "timestamp" : fixt["fixture"]["timestamp"],
             "fixture_id" : fixt["fixture"]["id"],
-
         }};
-        fixtures.insert(fixt["fixture"]["id"].to_string(), match_entry);
-    }
 
-    Ok(fixtures
-        .into_iter()
-        .map(|(x, y)| (x, serde_json::from_value::<Fixture>(y).unwrap()))
-        .collect())
+        fixtures
+            .entry(fixt["league"]["name"].to_string())
+            .or_default()
+            .push(match_entry);
+    }
+    Ok(fixtures)
 }
 
-async fn load_from_football_api(url: &Uri, api_key: &str) -> Result<String, Box<dyn Error>> {
+async fn football_api_request(url: &Uri, api_key: &str) -> Result<Bytes> {
     debug!("downloading match data from football-api");
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
@@ -122,7 +105,5 @@ async fn load_from_football_api(url: &Uri, api_key: &str) -> Result<String, Box<
         .body(Body::empty())
         .unwrap();
     let res = client.request(request).await?;
-    let bytes = hyper::body::to_bytes(res.into_body()).await?;
-    let str = std::str::from_utf8(&bytes[..])?;
-    Ok(str.to_string())
+    Ok(body::to_bytes(res.into_body()).await?)
 }

@@ -27,6 +27,7 @@ chrono = { version = "*", features = ["serde"] }
 regex = "*"
 notify = "*"
 uuid = { version= "*", features = ["v4", "serde"] }
+anyhow = "*"
 
 [target.'cfg(not(windows))'.dependencies]
 daemonize = "*"

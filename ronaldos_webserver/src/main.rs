@@ -4,7 +4,7 @@ mod root_service;
 mod services;
 
 use crate::middleware::{FootballApi, LocalStreamStore};
-use crate::services::{FileService, FixtureService, StreamsService, SessionMananger};
+use crate::services::{FileService, FixtureService, SessionMananger, StreamsService};
 use clap::{ArgEnum, Parser};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
@@ -59,20 +59,13 @@ async fn application_main(config: Config) -> Result<(), Error> {
     let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
     LocalStreamStore::run(&mut recordings_disk);
 
-    let football_api = Arc::new(
-        FootballApi::new(
-            "2022",
-            "11075",
-            config.api_key().clone(),
-            recordings_disk.clone(),
-        )
-        .await,
-    );
+    let football_api = FootballApi::new("2022", "1853", config.api_key().clone()).await;
 
     let service_manager = match config.login().username.is_empty() {
         false => Some(SessionMananger::new(config.login())),
         true => None,
     };
+    
     let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
     service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
     service_context.append_service(FileService::new(config.www_dir()).await?);
