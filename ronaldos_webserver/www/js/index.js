@@ -55,8 +55,8 @@ streams = []
 fixtures = {}
 
 $(document).ready(function () {
-    $.get("streams/all", function (data) {
-        $("#content").append(setup_match_table("Videos", "schedule_table", true));
+      $.get("streams/all", function (data) {
+        $("#content-videos").append(setup_match_table("Videos", "schedule_table", true));
         streams = data;
         let output = "";
         for (const value of streams) {
