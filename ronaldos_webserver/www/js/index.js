@@ -1,62 +1,62 @@
 var fixtures = [];
 class Match {
-    constructor(fixture_id) {
+    constructor(league, fixture_id) {
         this.fixture_id = fixture_id;
+        this.league = league;
     }
 
     get home() {
-        return fixtures[this.fixture_id]["home"];
+        return fixtures[this.league][this.fixture_id]["home"];
     }
 
     get away() {
-        return fixtures[this.fixture_id]["away"];
+        return fixtures[this.league][this.fixture_id]["away"];
     }
 
     get venue() {
-        return fixtures[this.fixture_id]["venue"];
+        return fixtures[this.league][this.fixture_id]["venue"];
     }
 
     get score() {
-        return fixtures[this.fixture_id]["score"];
+        return fixtures[this.league][this.fixture_id]["score"];
     }
 
     get date() {
-        function get_date(date) {
-            const nth = function (d) {
-                const dString = String(d);
-                const last = +dString.slice(-2);
-                if (last > 3 && last < 21) return 'th';
-                switch (last % 10) {
-                    case 1:
-                        return "st";
-                    case 2:
-                        return "nd";
-                    case 3:
-                        return "rd";
-                    default:
-                        return "th";
-                }
-            }
-            let output = "<div>" + date.getMonth() + " " + date.getDay() + " " + nth(date.getDay()) + "</div>";
-            output += "<div>" + date.getHours() + ":" + date.getMinutes() + "</div>";
-            return output;
-        }
         let date = new Date(0);
-        date.setUTCSeconds(fixtures[this.fixture_id]["timestamp"]);
+        date.setUTCSeconds(fixtures[this.league][this.fixture_id]["timestamp"]);
         return "<div>" + $.format.date(date, "D MMM") + "</div><div>" + $.format.date(date, "HH:mm");
     }
 }
 
-streams = []
-$(document).ready(function () {
-    // $.get("fixtures", function (data) {
-    //     fixtures = data;
-    //     let x = upcoming_fixture();
-    //     set_current_fixture(x);
-    //     load_schedule_table(x);
-    // });
+function setup_match_table(title, id, watch, header_type = "h1") {
+    output = `<${header_type}>${title}</${header_type}>`
+    output += `<div class="row table table-responsive-md"> \
+    <table class="table table-hover table-striped"> \
+        <thead>\
+            <tr>\
+            <th scope="col">Date</th> \
+            <th scope="col">Home</th> \
+            <th scope="col">Away</th> \
+            <th scope="col">Venue</th> \
+            <th scope="col">Score</th>`;
+    if (watch) {
+        output += '<th scope="col">Watch</th>';
+    }
+    output += `</tr>\
+        </thead>\
+        <tbody id="${id}">\
+        </tbody>\
+    </table>\
+</div>`;
+    return output;
+}
 
+streams = []
+fixtures = {}
+
+$(document).ready(function () {
     $.get("streams/all", function (data) {
+        $("#content").append(setup_match_table("Videos", "schedule_table", true));
         streams = data;
         let output = "";
         for (const value of streams) {
@@ -74,14 +74,25 @@ $(document).ready(function () {
             let date = new Date(0);
             date.setUTCSeconds(value["date"]);
             output += "<td scope='col'>" + $.format.date(date, "D MMM yyyy") + "</td>";
-            output += "<td>" + value["description"] + "</td>";
-
+            output += "<td colspan=\"4\">" + value["description"] + "</td>";
             output += "<td><button type=\"button\" onclick=\"start_video('" + streams.indexOf(value) + "')\" class=\"btn " + btn_style + " \">" + btn_text + "</button></td>";
             output += "<tr>"
         }
         $("#schedule_table").html(output);
 
     });
+
+    $.get("fixtures", function (data) {
+        fixtures = data;
+        $("#content").append("<h1>Fixtures</h1>")
+        for (const [league, wat] of Object.entries(fixtures)) {
+            let x = upcoming_fixture(league);
+            let table = league.replaceAll(' ', '-') + '-table';
+            $("#content").append(setup_match_table(league, table, false, "h2"));
+            $(`#${table}`).html(schedule_table(league, x));
+        }
+    });
+
     var player = videojs('video_player', {
         html5: {
             vhs: {
@@ -124,11 +135,10 @@ function start_video(stream_id) {
 
 }
 
-function load_schedule_table(x) {
-    const index = Object.keys(fixtures).findIndex(k => k === x);
+function schedule_table(league, index) {
     let output = "";
-    for (let i = Math.max(0, index - 2); i < Object.entries(fixtures).length; i++) {
-        const match = new Match(Object.keys(fixtures)[i]);
+    for (let i = Math.max(0, index - 2); i < Object.entries(fixtures[league]).length; i++) {
+        const match = new Match(league, Object.keys(fixtures[league])[i]);
         // disable previous fixtures
         if (i < index) {
             output += "<tr class=\"disabled\">";
@@ -144,21 +154,14 @@ function load_schedule_table(x) {
             "</td>";
         output += "<td>" + match.score +
             "</td>";
-        if (has_watch(match.fixture_id)) {
-            output += "<td><button type=\"button\" onclick=\"set_current_fixture(" + match.fixture_id + ")\" class=\"btn btn-outline-primary\">Watch</button></td>";
-        }
         output += "</tr>";
     }
-    $("#schedule_table").html(output);
+    return output;
 }
 
-function upcoming_fixture() {
-    for (const [key, value] of Object.entries(fixtures)) {
-        let game_time = fixtures[key]["timestamp"];
-        if (game_time * 1000 > Date.now()) {
-            return key;
-        }
-    }
+function upcoming_fixture(league) {
+    // const index = Object.keys(fixtures[league]).findIndex(k => k === x);
+    return Object.values(fixtures[league]).findIndex(fix => fix["timestamp"] * 1000 > Date.now());
 }
 
 function set_current_fixture(match) {

@@ -86,7 +86,12 @@ async fn to_data_model(bytes: Bytes) -> Result<BTreeMap<String, Vec<Value>>> {
         }};
 
         fixtures
-            .entry(fixt["league"]["name"].to_string())
+            .entry(
+                fixt["league"]["name"]
+                    .as_str()
+                    .expect("need a key")
+                    .to_string(),
+            )
             .or_default()
             .push(match_entry);
     }

@@ -2,9 +2,13 @@
 <script src="js/index.js"></script>
 <script src="js/jquery.countdown.min.js"></script>
 
-
-<h4 id="current_title" class="mb-3">Videos</h4>
-<div id="video-container" style="display: none;" class="row embed-responsive embed-responsive-16by9">
+<style>
+    h1 {
+        color: #034694;
+    }
+</style>
+<!-- <h1 id="current_title" class="mb-3">Videos</h1> -->
+<div id="video-container" style="display: none;" class="row embed-responsive embed-responsive-16by9 mt-5 mb-5">
     <video-js id="video_player" class="vjs-default-skin embed-responsive-item" controls preload="auto">
     </video-js>
     <script src="js/video.min.js"></script>
@@ -15,42 +19,3 @@
         }
     </style>
 </div>
-<div class="row table table-responsive-md">
-    <table class="table table-hover table-striped">
-        <thead>
-            <tr>
-                <th scope="col">Date</th>
-                <th scope="col">Title</th>
-                <th scope="col">Watch</th>
-            </tr>
-        </thead>
-        <tbody id="schedule_table">
-        </tbody>
-    </table>
-</div>
-<!-- 
-<div class="row mt-4">
-    <ul class="nav nav-tabs flex-column flex-sm-row mb-1">
-        <li class="nav-item">
-            <a class="nav-link active" aria-current="page" href="#">Fixtures</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="#">Watch Again</a>
-        </li>
-    </ul>
-</div>
-<div class="row table table-responsive-md">
-    <table class="table table-hover">
-        <thead>
-            <tr>
-                <th scope="col">Date</th>
-                <th scope="col">Home</th>
-                <th scope="col">Away</th>
-                <th scope="col">Venue</th>
-                <th scope="col">Score</th>
-            </tr>
-        </thead>
-        <tbody id="schedule_table">
-        </tbody>
-    </table>
-</div> -->
