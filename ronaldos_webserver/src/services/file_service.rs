@@ -1,6 +1,11 @@
+use crate::middleware::cache_map::CacheMap;
+use anyhow::Result;
 use async_trait::async_trait;
+use bytes::Bytes;
+use futures_util::lock::Mutex;
 use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
+use log::info;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,6 +16,7 @@ pub struct FileService {
     www_dir: PathBuf,
     header: Vec<u8>,
     footer: Vec<u8>,
+    cache: Mutex<CacheMap<Path, Bytes, 32>>,
 }
 
 impl FileService {
@@ -29,24 +35,34 @@ impl FileService {
             www_dir: www_dir.to_path_buf(),
             header: h?,
             footer: f?,
+            cache: Mutex::new(CacheMap::new()),
         })
     }
 
-    async fn load_file_from_uri(&self, uri: &str) -> Result<http::Response<Body>, std::io::Error> {
+    async fn load_file_from_uri(&self, uri: &str) -> Result<http::Response<Body>> {
         let mut path = self.www_dir.clone();
         path.push(&uri[1..]);
-        let mut bytes = Vec::new();
+        let bytes;
 
-        let content = tokio::fs::read(&path).await?;
-        if path.extension().eq(&Some(std::ffi::OsStr::new("html"))) {
-            bytes.reserve(self.header.len() + self.footer.len() + content.len());
-            bytes.extend_from_slice(&self.header);
-            bytes.extend(content);
-            bytes.extend_from_slice(&self.footer);
+        let mut lock = self.cache.lock().await;
+        if let Some(b) = lock.get(&path) {
+            bytes = b.clone();
         } else {
-            bytes.extend(content);
+            let content = tokio::fs::read(&path).await?;
+            if path.extension().eq(&Some(std::ffi::OsStr::new("html"))) {
+                let mut data = Vec::new();
+                data.reserve(self.header.len() + self.footer.len() + content.len());
+                data.extend_from_slice(&self.header);
+                data.extend(content);
+                data.extend_from_slice(&self.footer);
+                bytes = Bytes::from(data);
+            } else {
+                bytes = Bytes::from(content);
+            }
+            lock.insert(&path, bytes.clone());
         }
 
+        drop(lock);
         let mut response = http::Response::builder()
             .status(http::StatusCode::OK)
             .header(http::header::CONTENT_LENGTH, bytes.len());

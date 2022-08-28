@@ -5,7 +5,6 @@ use hyper::Body;
 use hyper_rusttls::service::RequestHandler;
 use std::{
     fmt::Display,
-    ops::Deref,
     path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},

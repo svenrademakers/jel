@@ -1,7 +1,6 @@
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::{Hash, Hasher},
-    slice::SliceIndex,
 };
 
 use log::debug;
@@ -10,7 +9,8 @@ use log::debug;
 /// insertion exceeds the capacity, the oldest entry in the container will be
 /// purged to make place for the new one.
 /// lookup, insertion and removal all operate on a constant complexity.
-pub struct CacheController<K, V, const N: usize>
+/// TODO: create atomic operations so a get can be none mutable
+pub struct CacheMap<K, V, const N: usize>
 where
     K: Hash + ?Sized,
 {
@@ -22,15 +22,15 @@ where
     last: Option<usize>,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 struct NodeInfo {
     prev: Option<usize>,
     next: Option<usize>,
 }
 
-impl<K, V, const N: usize> CacheController<K, V, N>
+impl<K, V, const N: usize> CacheMap<K, V, N>
 where
-    V: Default + ?Sized,
+    V: Default + ?Sized + Clone,
     K: Hash + ?Sized,
 {
     pub fn new() -> Self {
@@ -50,35 +50,57 @@ where
         // if the key already exists, update its value and adjust node info
         if let Some(i) = self.lookup.get(&hash).cloned() {
             debug!("updating {}", i);
-            self.remove_from_link_list(i);
-            self.node_info[i].next = None;
-            self.node_info[i].prev = self.first;
-            self.first = Some(i);
+            self.update_to_most_recent(i);
             index = i;
         } else if self.lookup.len() < N {
-            debug!("back inserting");
-            index = self.first.map(|v| v + 1).unwrap_or(0);
+            debug!("back inserting from {:?}", self.last);
+            index = self.last.map(|v| v + 1).unwrap_or(0);
             if index == 0 {
-                // first item added, also init last
-                self.last = Some(index);
+                // first item added, also init first
+                self.first = Some(index);
+            } else {
+                self.node_info[index - 1].next = Some(index);
+                self.node_info[index].prev = self.last;
             }
             self.lookup.insert(hash, index);
-            self.first = Some(index);
+            self.last = Some(index);
         } else {
-            debug!("replacing {:?}", self.last);
-            // replace oldest with newest
-            let last = self
-                .last
-                .expect("whole storage array should be filled by now");
-            self.last = self.node_info[last].next;
-            self.node_info[last].prev = self.first;
-            self.node_info[last].next = None;
-            self.first = Some(last);
-            index = last;
+            debug!("replacing {:?}", self.first);
+            let recycle_id = self.first.unwrap();
+            let new_oldest = self.node_info[recycle_id].next.unwrap();
+            self.node_info[new_oldest].prev = None;
+            self.first = Some(new_oldest);
+            self.node_info[recycle_id].next = None;
+            self.node_info[recycle_id].prev = self.last;
+            self.node_info[self.last.unwrap()].next = Some(recycle_id);
+            self.last = Some(recycle_id);
+            index = recycle_id;
         }
-
+        debug!(
+            "{:?} first:{:?}, last:{:?}",
+            self.node_info, self.first, self.last
+        );
         self.storage[index] = item;
         &self.storage[index]
+    }
+
+    fn update_to_most_recent(&mut self, i: usize) {
+        if self.first == self.last {
+            return;
+        }
+
+        if self.first == Some(i) {
+            self.first = self.node_info[self.first.unwrap()].next;
+        }
+
+        if Some(i) != self.last {
+            self.remove_from_link_list(i);
+            self.node_info[i].next = None;
+            self.node_info[i].prev = self.last;
+            self.node_info[self.last.unwrap()].next = Some(i);
+
+            self.last = Some(i);
+        }
     }
 
     fn remove_from_link_list(&mut self, index: usize) {
@@ -94,8 +116,42 @@ where
         todo!()
     }
 
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get(&mut self, key: &K) -> Option<&V> {
+        let hash = calculate_hash(key);
+        if let Some(i) = self.lookup.get(&hash).cloned() {
+            self.update_to_most_recent(i);
+            return Some(&self.storage[i]);
+        }
         None
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = V> + '_ {
+        CacheMapIterator {
+            cache: &self,
+            node_info_index: self.first,
+        }
+    }
+}
+
+pub struct CacheMapIterator<'a, K, V, const N: usize>
+where
+    K: Hash + ?Sized,
+{
+    cache: &'a CacheMap<K, V, N>,
+    node_info_index: Option<usize>,
+}
+
+impl<'a, K, V, const N: usize> Iterator for CacheMapIterator<'a, K, V, N>
+where
+    V: Default + ?Sized + Clone,
+    K: Hash + ?Sized,
+{
+    type Item = V;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.cache.storage[self.node_info_index?].clone();
+        self.node_info_index = self.cache.node_info[self.node_info_index?].next;
+        Some(item)
     }
 }
 
@@ -107,32 +163,82 @@ fn calculate_hash<T: Hash + ?Sized>(t: &T) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::logger::init_log;
+    use super::CacheMap;
 
-    use super::CacheController;
+    #[test]
+    fn test_iterator() {
+        let mut cache = CacheMap::<u8, &str, 3>::new();
+        cache.insert(&1, "1");
+        cache.insert(&2, "2");
+        cache.insert(&3, "3");
+        assert_eq!(cache.last, Some(2));
+        assert_eq!(cache.first, Some(0));
+        assert_eq!(vec!["1", "2", "3"], cache.iter().collect::<Vec<&str>>());
+    }
 
     #[test]
     fn test_insertion_below_capacity() {
-        init_log(log::Level::Debug);
+        let mut cache = CacheMap::<u8, &str, 3>::new();
+        cache.insert(&1, "1");
+        cache.insert(&1, "1");
+        assert_eq!(vec!["1"], cache.iter().collect::<Vec<&str>>());
+        assert_eq!(cache.storage[0], "1");
+        assert_eq!(cache.storage[1], "");
+        assert_eq!(cache.storage[2], "");
+        cache.insert(&2, "2");
+        assert_eq!(vec!["1", "2"], cache.iter().collect::<Vec<&str>>());
+        assert_eq!(cache.storage[0], "1");
+        assert_eq!(cache.storage[1], "2");
+        assert_eq!(cache.storage[2], "");
+        cache.insert(&2, "2");
+        assert_eq!(vec!["1", "2"], cache.iter().collect::<Vec<&str>>());
+        assert_eq!(cache.storage[0], "1");
+        assert_eq!(cache.storage[1], "2");
+        assert_eq!(cache.storage[2], "");
+        cache.insert(&3, "3");
+        assert_eq!(vec!["1", "2", "3"], cache.iter().collect::<Vec<&str>>());
+        assert_eq!(cache.storage[0], "1");
+        assert_eq!(cache.storage[1], "2");
+        assert_eq!(cache.storage[2], "3");
+    }
 
-        // let mut cache = CacheController::<u8, &str, 3>::new();
-        // cache.insert(&1, "item1");
-        // cache.insert(&2, "item2");
-        // cache.insert(&3, "item3");
-        // cache.insert(&2, "item2");
-        // assert_eq!(cache.storage[0], "item1");
-        // assert_eq!(cache.storage[1], "item2");
-        // assert_eq!(cache.storage[2], "item3");
-        // assert_eq!(None, cache.node_info[0].prev);
-        // assert_eq!(Some(2), cache.node_info[0].next);
-        // assert_eq!(Some(2), cache.node_info[1].prev);
-        // assert_eq!(None, cache.node_info[1].next);
+    #[test]
+    fn resinserting_results_in_update() {
+        let mut cache = CacheMap::<u8, &str, 3>::new();
+        cache.insert(&1, "1");
+        cache.insert(&2, "2");
+        cache.insert(&3, "3");
+        assert_eq!(vec!["1", "2", "3"], cache.iter().collect::<Vec<&str>>());
+        cache.insert(&2, "test2");
+        assert_eq!(vec!["1", "3", "test2"], cache.iter().collect::<Vec<&str>>());
+        assert_eq!(cache.storage[1], "test2");
+        assert_eq!(cache.last, Some(1));
+        assert_eq!(cache.first, Some(0));
+    }
 
+    #[test]
+    fn overflow_result_in_purge_of_oldest() {
+        let mut cache = CacheMap::<u8, &str, 3>::new();
+        cache.insert(&1, "1");
+        cache.insert(&2, "2");
+        cache.insert(&3, "3");
+        cache.insert(&5, "5");
+        assert_eq!(vec!["2", "3", "5"], cache.iter().collect::<Vec<&str>>());
+        cache.insert(&3, "nr3");
+        assert_eq!(vec!["2", "5", "nr3"], cache.iter().collect::<Vec<&str>>());
+    }
 
-
-        // cache.insert(&4, "item4");
-        // assert_eq!(Some(&"item2"), cache.get(&2));
-        // assert_eq!(Some(&"item3"), cache.get(&3));
-        // assert_eq!(Some(&"item4"), cache.get(&4));
+    #[test]
+    fn get_updates_history() {
+        let mut cache = CacheMap::<u8, &str, 3>::new();
+        cache.insert(&1, "1");
+        cache.insert(&2, "2");
+        cache.insert(&3, "3");
+        cache.get(&1);
+        assert_eq!(vec!["2", "3", "1"], cache.iter().collect::<Vec<&str>>());
+        cache.get(&3);
+        assert_eq!(vec!["2", "1", "3"], cache.iter().collect::<Vec<&str>>());
+        cache.get(&2);
+        assert_eq!(vec!["1", "3", "2"], cache.iter().collect::<Vec<&str>>());
     }
 }

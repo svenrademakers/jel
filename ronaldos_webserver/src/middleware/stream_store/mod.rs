@@ -2,7 +2,7 @@ pub mod data_types;
 mod file_watcher;
 
 use self::data_types::*;
-use super::cache_map::CacheController;
+use super::cache_map::CacheMap;
 use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
@@ -42,7 +42,7 @@ pub struct LocalStreamStore {
     stream_map: RwLock<BTreeMap<Uuid, Stream>>,
     uuid_lookup: RwLock<BTreeMap<PathBuf, Uuid>>,
     /// 3 way cache, caching streams optimized for the 3 different bitrate levels.
-    file_cache: RwLock<CacheController<Path, Bytes, 128>>,
+    file_cache: RwLock<CacheMap<Path, Bytes, 128>>,
     /// This watcher object is used to exit the watcher task.
     watcher_sender: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -58,7 +58,7 @@ impl LocalStreamStore {
             root: root.to_path_buf(),
             stream_map: RwLock::new(BTreeMap::default()),
             uuid_lookup: RwLock::new(BTreeMap::default()),
-            file_cache: RwLock::new(CacheController::new()),
+            file_cache: RwLock::new(CacheMap::new()),
             watcher_sender: None,
         })
     }
@@ -244,19 +244,15 @@ impl LocalStreamStore {
     where
         P: Hash + AsRef<Path>,
     {
+        let mut cache = self.file_cache.write().await;
         let path = self.root.join(file.as_ref());
-        // if let Some(buffer) = self.cache_controller.read().await.get() {
-        //     return Ok(buffer.clone());
-        // }
+        if let Some(buffer) = cache.get(&path) {
+            return Ok(buffer.clone());
+        }
 
-        // Ok(self
-        //     .cache_controller
-        //     .write()
-        //     .await
-        //     .insert(file.as_ref(), Arc::new(tokio::fs::read(path).await?))
-        //     .clone())
-
-        Ok(tokio::fs::read(path).await?.into())
+        Ok(cache
+            .insert(file.as_ref(), tokio::fs::read(path).await?.into())
+            .clone())
     }
 }
 
@@ -294,7 +290,7 @@ mod tests {
         assert_eq!(0, stream_store.scan(temp.path()).await.unwrap().count());
         assert_eq!(0, stream_store.stream_map.read().await.len());
 
-        let registered = stream_store
+        let _ = stream_store
             .register(
                 "asdfas".to_string(),
                 vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
@@ -302,9 +298,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let file_name = temp
-            .path()
-            .join(format!("{}.stream", registered.to_string()));
+
         assert_eq!(1, stream_store.scan(temp.path()).await.unwrap().count());
 
         tokio::fs::File::create(temp.path().join("test1.dash"))

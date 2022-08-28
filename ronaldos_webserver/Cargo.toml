@@ -1,6 +1,6 @@
 [package]
 name = "ronaldos-webserver"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
 description = "Rust https server including ronaldo's own specific http services"
