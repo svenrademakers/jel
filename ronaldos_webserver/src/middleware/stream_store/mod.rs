@@ -3,8 +3,10 @@ mod file_watcher;
 
 use self::data_types::*;
 use super::cache_map::CacheController;
+use anyhow::{bail, ensure, Context, Result};
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, trace};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
@@ -40,7 +42,7 @@ pub struct LocalStreamStore {
     stream_map: RwLock<BTreeMap<Uuid, Stream>>,
     uuid_lookup: RwLock<BTreeMap<PathBuf, Uuid>>,
     /// 3 way cache, caching streams optimized for the 3 different bitrate levels.
-    file_cache: RwLock<CacheController<Path, Arc<Vec<u8>>, 128>>,
+    file_cache: RwLock<CacheController<Path, Bytes, 128>>,
     /// This watcher object is used to exit the watcher task.
     watcher_sender: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -48,7 +50,7 @@ pub struct LocalStreamStore {
 impl LocalStreamStore {
     pub async fn new(root: &Path) -> Arc<LocalStreamStore> {
         if !root.exists() {
-            warn!("creating {}, does not exist", root.to_string_lossy());
+            info!("creating {}, does not exist", root.to_string_lossy());
             tokio::fs::create_dir_all(&root).await.unwrap();
         }
 
@@ -83,7 +85,7 @@ impl LocalStreamStore {
 
     /// Load a .stream meta file from disk. path can be a directory or a file.
     /// note that recursive scanning is disabled. see [LocalStreamStore::scan]
-    async fn load(&self, path: PathBuf) -> std::io::Result<()> {
+    async fn load(&self, path: PathBuf) -> Result<()> {
         let mut lookup = Vec::new();
         let new_meta_files = self
             .scan(&path)
@@ -101,34 +103,32 @@ impl LocalStreamStore {
 
     /// Scans for .stream files in a given path none recursively. If path is not a
     /// sub directory of root, None is returned.
-    async fn scan(
-        &self,
-        path: &Path,
-    ) -> std::io::Result<impl Iterator<Item = (PathBuf, MetaFile)>> {
-        if !path.starts_with(&self.root) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!(
-                    "{} is not in {}",
-                    path.to_string_lossy(),
-                    self.root.to_string_lossy()
-                ),
-            ));
-        }
-        trace!("scanning: {:?}", &path);
+    async fn scan(&self, path: &Path) -> Result<impl Iterator<Item = (PathBuf, MetaFile)>> {
+        ensure!(
+            path.starts_with(&self.root),
+            format!(
+                "{} is not in {}",
+                path.to_string_lossy(),
+                self.root.to_string_lossy()
+            )
+        );
 
+        trace!("scanning: {:?}", &path);
         let mut found = Vec::new();
-        let mut push_found = |path: &Path| {
-            if let Some(tuple) = self.parse_file(path) {
-                found.push(tuple);
-            }
+        let mut push_found = |path: &Path| match self.parse_file(path) {
+            Ok(tuple) => found.push(tuple),
+            Err(e) => error!("{}", e),
         };
 
-        let md = tokio::fs::metadata(path).await?;
+        let md = tokio::fs::metadata(path)
+            .await
+            .with_context(|| format!("failed to get metadata for {}", path.to_string_lossy()))?;
         if md.is_file() {
             push_found(path);
         } else {
-            let mut dir_entry = tokio::fs::read_dir(path).await?;
+            let mut dir_entry = tokio::fs::read_dir(path)
+                .await
+                .with_context(|| format!("failed to read dir {}", path.to_string_lossy()))?;
             while let Ok(Some(entry)) = dir_entry.next_entry().await {
                 push_found(&entry.path());
             }
@@ -143,9 +143,12 @@ impl LocalStreamStore {
         Ok(found.into_iter())
     }
 
-    fn parse_file(&self, path: &Path) -> Option<(PathBuf, MetaFile)> {
+    fn parse_file(&self, path: &Path) -> Result<(PathBuf, MetaFile)> {
         if path.extension() != Some(OsStr::new("stream")) {
-            return None;
+            bail!(
+                "will not parse {}. not a .stream extension",
+                path.to_string_lossy()
+            );
         }
 
         let relative = path
@@ -154,21 +157,12 @@ impl LocalStreamStore {
             .to_path_buf();
         trace!("scanning {}", relative.to_string_lossy());
 
-        let file = match std::fs::File::open(path) {
-            Ok(f) => f,
-            Err(e) => {
-                error!("error opening {:?}: {}", path, e);
-                return None;
-            }
-        };
+        let file = std::fs::File::open(path)
+            .with_context(|| format!("error opening {}", path.to_string_lossy()))?;
 
-        match serde_yaml::from_reader::<std::fs::File, MetaFile>(file) {
-            Ok(stream) => Some((path.to_path_buf(), stream)),
-            Err(e) => {
-                error!("could not parse {} {}", path.to_string_lossy(), e);
-                None
-            }
-        }
+        let stream = serde_yaml::from_reader::<std::fs::File, MetaFile>(file)
+            .with_context(|| format!("could not parse {}", path.to_string_lossy()))?;
+        Ok((path.to_path_buf(), stream))
     }
 
     pub async fn removed(&self, path: PathBuf) -> bool {
@@ -246,7 +240,7 @@ impl LocalStreamStore {
         Ok(registration.uuid)
     }
 
-    pub async fn get_segment<P>(&self, file: P) -> std::io::Result<Arc<Vec<u8>>>
+    pub async fn get_segment<P>(&self, file: P) -> Result<Bytes>
     where
         P: Hash + AsRef<Path>,
     {
@@ -262,7 +256,7 @@ impl LocalStreamStore {
         //     .insert(file.as_ref(), Arc::new(tokio::fs::read(path).await?))
         //     .clone())
 
-        Ok(Arc::new(tokio::fs::read(path).await?))
+        Ok(tokio::fs::read(path).await?.into())
     }
 }
 
@@ -278,8 +272,6 @@ fn prepend_prefix(mut stream: Stream, prefix: &'static str) -> Stream {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use super::*;
     use tempdir::TempDir;
 

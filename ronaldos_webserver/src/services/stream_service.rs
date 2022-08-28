@@ -94,7 +94,7 @@ impl RequestHandler for StreamsService {
                     response = response.header(http::header::CONTENT_TYPE, content_type);
                 }
 
-                Ok(response.body(Body::from(data.deref().clone())).unwrap())
+                Ok(response.body(data.into()).unwrap())
             }
             _ => Ok(http::Response::builder()
                 .status(http::StatusCode::NOT_FOUND)
