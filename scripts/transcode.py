@@ -1,14 +1,25 @@
 import argparse
 import subprocess
 import os
+import time
+import yaml
+import uuid
 
 parser = argparse.ArgumentParser()
 parser.add_argument(dest='stream_name', help="name of the stream")
 parser.add_argument(dest='description', help="title of the stream")
 parser.add_argument('-cwd', nargs='?', default="Z:\\")
 parser.add_argument('-d', "--datestamp", nargs='?', default=None)
-
 args = parser.parse_args()
+
+def write_yaml():
+    date= int(time.time())
+    id= uuid.uuid4()
+    sources = [f"{args.stream_name}/{args.stream_name}_vod.m3u8"]
+    yaml_file= {'uuid': str(id), 'sources': sources, 'date': date, 'description': args.description, 'live': True}
+    with open(f'{args.cwd}/{args.stream_name}.stream', 'w') as file:
+        documents = yaml.dump(yaml_file, file)
+write_yaml()
 
 cwd= args.cwd
 stream_name=args.stream_name
