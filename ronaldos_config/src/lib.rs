@@ -15,7 +15,7 @@ pub struct Login {
 
 macro_rules! config_definitions {
     ($($name:ident : $type:ty = $default:expr),+) => {
-        #[derive(Deserialize, Debug, Default)]
+        #[derive(Deserialize, Clone, Debug, Default)]
         pub struct Config {
             $($name: Option<$type>,)*
         }

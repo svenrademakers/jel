@@ -1,20 +1,21 @@
+mod handlers;
 mod logger;
-mod middleware;
-mod root_service;
-mod services;
 
+use actix_files::Files;
+use actix_web::{web, App, HttpServer};
 use crate::middleware::{FootballApi, LocalStreamStore};
 use crate::services::{FileService, FixtureService, SessionMananger, StreamsService};
 use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
-use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
-use log::*;
+
+use handlers::authentication::RonaldoAuthentication;
+use handlers::redirect_service::RedirectScheme;
 use logger::init_log;
 use ronaldos_config::{get_application_config, Config};
-use root_service::RootService;
 use std::io::{self, Error, ErrorKind};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -52,45 +53,47 @@ fn main() -> io::Result<()> {
     }
 
     let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async move { application_main(config).await })
+    rt.block_on(async move { application_main(Arc::new(config)).await })
 }
 
-async fn application_main(config: Config) -> Result<(), Error> {
-    let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
-    LocalStreamStore::run(&mut recordings_disk);
+async fn application_main(config: Arc<Config>) -> anyhow::Result<(), Error> {
+   // let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
+   // LocalStreamStore::run(&mut recordings_disk);
 
-    let football_api = FootballApi::new("2022", "1853", config.api_key().clone()).await;
+   // let football_api = FootballApi::new("2022", "1853", config.api_key().clone()).await;
 
-    let service_manager = match config.login().username.is_empty() {
-        false => Some(SessionMananger::new(config.login())),
-        true => None,
-    };
+   // let service_manager = match config.login().username.is_empty() {
+   //     false => Some(SessionMananger::new(config.login())),
+   //     true => None,
+   // };
 
-    let address = format!("{}:{}", config.host(), config.port())
+    let address: SocketAddr = format!("{}:{}", config.host(), config.port())
         .parse()
         .unwrap();
     let host = format!("https://{}", config.hostname());
-    let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
-    service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
-    service_context.append_service(FileService::new(config.www_dir()).await?);
-    service_context.append_service(StreamsService::new(
-        recordings_disk,
-        host,
-        *config.verbose(),
-    ));
+        .parse()
+        .unwrap();
     let tls_cfg = load_server_config(config.certificates(), config.private_key());
+    let tls_enabled = tls_cfg.is_ok();
+    let cfg = config.clone();
 
-    if let Err(e) = run_server(
-        Arc::new(service_context),
-        address,
-        config.hostname(),
-        tls_cfg.ok(),
-    )
-    .await
-    {
-        error!("error running server: {}", e);
-    }
-    Ok(())
+    let build_server = HttpServer::new(move || {
+        App::new() //.wrap(RedirectSchemeBuilder::new().build())
+            .wrap(RedirectScheme::new(tls_enabled))
+            .wrap(RonaldoAuthentication::new())
+            .app_data(cfg.clone())
+            .service(
+                Files::new("/", cfg.www_dir())
+                    .index_file(cfg.www_dir().join("index.html").to_string_lossy()),
+            )
+    });
+
+    let server = match tls_cfg {
+        Ok(cfg) => build_server.bind_rustls(address, cfg)?,
+        Err(_) => build_server.bind(address)?,
+    };
+
+    server.run().await
 }
 
 #[cfg(not(windows))]

@@ -12,22 +12,22 @@ tokio = { version = "*", features = ["net", "fs", "rt", "rt-multi-thread", "macr
 tokio-stream = { version = "*", features = ["fs"] }
 bytes = "*"
 async-trait = "*"
-http = "*"
-log = "*"
-hyper = {version = "*", features = ["full", "tcp"]}
+log = { version = "*", features = ["std"] }
 futures-util = "*"
 serde_json= "*"
 serde = { version = "*", features = ["derive"] }
-syslog = "*"
 once_cell = "*"
 base64="*"
 serde_yaml="*"
-hyper_rusttls = { path= "../hyper_rusttls" }
 chrono = { version = "*", features = ["serde"] }
 regex = "*"
 notify = "*"
 uuid = { version= "*", features = ["v4", "serde"] }
 anyhow = "*"
+actix-web = { version = "*", features = ["rustls"] }
+actix-files = "*"
+actix-service = "*"
+hyper_rusttls = { path= "../hyper_rusttls" }
 
 [target.'cfg(not(windows))'.dependencies]
 daemonize = "*"

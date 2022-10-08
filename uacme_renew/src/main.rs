@@ -1,6 +1,7 @@
 mod log;
 
 use ::log::{error, info};
+use anyhow::Result;
 use clap::Parser;
 use daemonize::{Daemonize, DaemonizeError};
 use ronaldos_config::get_webserver_pid;
@@ -23,7 +24,7 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    log::init()?;
+    log::init().unwrap();
     info!("lets go");
     let cli = Args::parse();
     let config = ronaldos_config::get_application_config(&cli.config);
