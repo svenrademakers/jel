@@ -5,7 +5,7 @@ mod services;
 
 use crate::middleware::{FootballApi, LocalStreamStore};
 use crate::services::{FileService, FixtureService, SessionMananger, StreamsService};
-use clap::{ArgEnum, Parser};
+use clap::{ValueEnum, Parser};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
 use hyper_rusttls::run_server;
@@ -26,11 +26,11 @@ use std::sync::Arc;
 pub struct Cli {
     #[clap(short, long, default_value = ronaldos_config::CFG_PATH )]
     pub config: PathBuf,
-    #[clap(short, arg_enum)]
+    #[clap(short, value_enum)]
     pub daemon: Option<DeamonAction>,
 }
 
-#[derive(ArgEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug)]
 pub enum DeamonAction {
     START,
     STOP,
