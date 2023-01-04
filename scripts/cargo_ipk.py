@@ -6,13 +6,14 @@ import os
 import shutil
 import tarfile
 
-
 class cargo_package:
-    def __init__(self, cargo_package_name):
+    def __init__(self, cargo_package_name, manifest_path, binary_path=None):
         self.temp_dir = tempfile.TemporaryDirectory()
+        self.binary_path = binary_path
         self.dependencies = []
         self.metadata = json.loads(subprocess.check_output(
-            f"cargo metadata --format-version 1 --no-deps --manifest-path Cargo.toml", shell=True))
+            f"cargo metadata --format-version 1 --no-deps --manifest-path \
+            {manifest_path}/Cargo.toml", shell=True))
         for crate in self.metadata["packages"]:
             if crate["name"] == cargo_package_name:
                 self.meta_crate = crate
@@ -75,8 +76,13 @@ class cargo_package:
             # f.write(f"Installed-Size: {install_size}\n")
 
     def __copy_binary(self):
+        if self.binary_path:
+            target_dir = self.binary_path
+        else:
+            target_dir = self.metadata["target_directory"]
+
         bin_name = self.meta_crate["targets"][0]["name"]
-        file = f'{self.metadata["target_directory"]}/{os.environ["RUST_TARGET"]}/release/{bin_name}'
+        file = f'{target_dir}/{os.environ["RUST_TARGET"]}/release/{bin_name}'
         self.install(file, f"/opt/sbin")
 
     def create_package(self, output_dir, group, owner):
@@ -105,7 +111,7 @@ class cargo_package:
             data.add(".", filter=set_permissions)
 
         os.chdir(self.temp_dir.name)
-        with tarfile.open(f"{current_dir}/{output_dir}/{package_name}", "w:gz", format=tarfile.GNU_FORMAT) as targz:
+        with tarfile.open(f"{output_dir}/{package_name}", "w:gz", format=tarfile.GNU_FORMAT) as targz:
             targz.add("./debian-binary", filter=set_permissions)
             targz.add("./data.tar.gz", filter=set_permissions)
             targz.add("./control.tar.gz", filter=set_permissions)
@@ -117,6 +123,8 @@ def create_repository(packages, output_dir):
     for pkg in packages:
         print("creating ipk for " + pkg.name)
         pkg.create_package(output_dir, 0,0)
-    print("creating repository index..")
+
+    print(f"creating repository index of {output_dir} ..")
+    opkg_root= os.getenv('OPKG_ROOT')
     subprocess.call(
-        f"opkg-make-index {output_dir}/. > {output_dir}/Packages", shell=True)
+        f"python3 {opkg_root}/opkg-make-index {output_dir}/. > {output_dir}/Packages", shell=True)
