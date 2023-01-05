@@ -11,15 +11,17 @@
   outputs = { self, nixpkgs, flake-utils, rust-overlay, nix-filter }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
-        target = "aarch64-unknown-linux-gnu";
-        #target = "aarch64-unknown-linux-musl";
+        target = "aarch64-unknown-linux-musl";
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
+            #(import ./merlin_gcc_overlay.nix)
             (import rust-overlay)
           ];
-          crossSystem = { config = target;
-          rustc.config = target;};
+          crossSystem = {
+            config = target;
+            rustc.config = target;
+          };
         };
         rustToolchain = (pkgs.buildPackages.rust-bin.stable.latest.default.override {
           targets = [ target ];
@@ -38,7 +40,7 @@
             };
             makeFlags = [
               "DESTDIR=${placeholder "out"}"
-              "PREFIX=/"
+              "PREFIX="
             ];
             buildPhase = ''
               make $makeFlags install-utils 
@@ -46,22 +48,52 @@
             dontInstall = true;
           };
 
-          default = rustPlatform.buildRustPackage {
-            pname = "ronaldos-opkg-repository";
+          ronaldo-streaming = rustPlatform.buildRustPackage {
+            name = "ronaldo-streaming";
             version = "0.0.1";
-            src = ./.;
-
+            src = nix-filter.lib.filter {
+              root = ./.;
+              include = [
+                ./Cargo.toml
+                ./Cargo.lock
+                ./hyper_rusttls
+                ./ronaldos_config
+                ./ronaldos_webserver
+                ./uacme_renew
+              ];
+            };
             cargoLock = {
               lockFile = ./Cargo.lock;
             };
-
-            nativeBuildInputs = [ rustToolchain opkg-utils buildPackages.python39 ];
+            nativeBuildInputs = [ rustToolchain ];
             outputs = [ "out" "www" ];
             installPhase = ''
-              python3 scripts/create_ipk_packages.py ronaldos_repository
-              cp -r ronaldos_webserver/www $www
               cp -r target $out
+              cp -r ronaldos_webserver/www $www
             '';
+          };
+
+          default = stdenv.mkDerivation {
+            name = "opkg-repository";
+            version = "0.0.1";
+            src = ./scripts;
+            RUST_TARGET = target;
+            nativeBuildInputs = [ rustToolchain ronaldo-streaming opkg-utils buildPackages.python39 ];
+            installPhase = ''
+              # workaround to call opkg scripts. They are loaded into the PATH
+              # environment correctly, but the included shebangs cannot be
+              # resolved by the nix environment.
+              export OPKG_ROOT=${opkg-utils.out}/bin
+              python3 create_ipk_packages.py -m ${ronaldo-streaming.src} -b ${ronaldo-streaming.out} $out ${ronaldo-streaming.www}
+            '';
+          };
+        };
+
+        devShells = {
+          default = stdenv.mkDerivation rec {
+            name = "native development shell";
+            src = self;
+            nativeBuildInputs = [ rustToolchain buildPackages.python39];
           };
         };
       }

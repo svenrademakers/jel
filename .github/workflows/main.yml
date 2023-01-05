@@ -11,30 +11,21 @@ env:
 jobs:
   aarch64-build:
     runs-on: ubuntu-latest
-    env:
-      RUST_TARGET: "aarch64-unknown-linux-musl"
     steps:
       - name: checkout git repo
         uses: actions/checkout@v2
       - name: build http-server
         run: |
-          chmod -R 777 $GITHUB_WORKSPACE &&\
-          docker run -dt -v $GITHUB_WORKSPACE:$GITHUB_WORKSPACE --name asuswrt-merlin-build acrisliu/asuswrt-merlin-build &&\
+          docker run -dt -v $GITHUB_WORKSPACE:$GITHUB_WORKSPACE --name nix-container nixos/nix &&\
           docker exec --workdir $GITHUB_WORKSPACE \
-          -e RUST_TARGET=$RUST_TARGET \
           -e PASSWORD=${{ secrets.PASSWORD }} \
           -e USERNAME=${{ secrets.USERNAME }} \
-          asuswrt-merlin-build scripts/build_aarch64_openwrt.sh
-      - name: archiving .ipk package and create index
-        run: |
-          git clone --depth 1 https://git.yoctoproject.org/opkg-utils &&\
-          cd ./opkg-utils && sudo make install && cd .. &&\
-          python3 scripts/create_ipk_packages.py ronaldos_repository
+          nix-container nix --extra-experimental-features 'nix-command flakes' build .
       - name: updating package index
         uses: appleboy/scp-action@master
         with:
           host: "svenrademakers.com"
           username: "admin"
           key: ${{ secrets.SSH_PASS }}
-          source: "ronaldos_repository"
+          source: "result"
           target: "/opt/share/nginx/html"
