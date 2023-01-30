@@ -93,17 +93,21 @@ $(document).ready(function () {
         }
     });
 
-    var player = videojs('video_player', {
-        html5: {
-            vhs: {
-                overrideNative: true
+    options = {
+            fluid: true,
+            techOrder: [ 'chromecast', 'html5' ],
+            html5: {
+                vhs: {
+                    overrideNative: true
+                },
+                nativeAudioTracks: false,
+                nativeVideoTracks: false
             },
-            nativeAudioTracks: false,
-            nativeVideoTracks: false
-        },
-        autoplay: true,
-        liveui: false,
-    }, function () {
+            autoplay: true,
+            liveui: false,
+    };
+    var player = videojs('video_player', options, function () {
+        this.chromecast();
         videojs.log("player loaded", this.currentSrc());
     });
 })

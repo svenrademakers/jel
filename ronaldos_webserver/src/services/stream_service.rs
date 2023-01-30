@@ -82,6 +82,7 @@ impl RequestHandler for StreamsService {
                 let data = self.stream_store.get_segment(file).await.unwrap();
                 let mut response = http::response::Builder::new()
                     .header(http::header::CACHE_CONTROL, "no-cache")
+                    .header(http::header::ACCEPT_ENCODING, "identity")
                     .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "'*' always")
                     .header(
                         http::header::ACCESS_CONTROL_EXPOSE_HEADERS,

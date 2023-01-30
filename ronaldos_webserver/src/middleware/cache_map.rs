@@ -4,6 +4,7 @@ use std::{
 };
 
 use log::debug;
+use log::trace;
 
 /// This container can hold a fixed size of elements. On the occasion an
 /// insertion exceeds the capacity, the oldest entry in the container will be
@@ -76,7 +77,7 @@ where
             self.last = Some(recycle_id);
             index = recycle_id;
         }
-        debug!(
+        trace!(
             "{:?} first:{:?}, last:{:?}",
             self.node_info, self.first, self.last
         );

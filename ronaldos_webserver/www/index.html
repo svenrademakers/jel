@@ -7,12 +7,14 @@
         color: #034694;
     }
 </style>
-<!-- <h1 id="current_title" class="mb-3">Videos</h1> -->
 <div id="video-container" style="display: none;" class="row embed-responsive-16by9 mt-5 mb-5">
     <video-js id="video_player" class="vjs-default-skin embed-responsive-item" controls preload="auto">
     </video-js>
     <script src="js/video.min.js"></script>
     <script src="js/videojs-http-streaming.min.js"></script>
+    <script src="js/silvermine-videojs-chromecast.min.js"></script>
+   <link href="silvermine-videojs-chromecast.css" rel="stylesheet">
+    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
     <style>
         .disabled {
             color: #b9b9b9;
