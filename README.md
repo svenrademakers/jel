@@ -14,6 +14,9 @@ Some other cool features of this project:
 * Nix support, sets up an native build environment, compiles everything from
   source on any machine with only one command.
 
+## Component Overview
+![alt text](diagrams/component_overview.png)
+
 ## Build
 
 Building is super easy, only [nix](https://nixos.org/download.html) is required to be installed on your machine.

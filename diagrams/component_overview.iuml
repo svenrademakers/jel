@@ -1,0 +1,22 @@
+@startuml
+interface https as een
+
+folder svenrademakers.com {
+    database video_database
+    node webserver
+    webserver->video_database
+
+    webserver--een: front-end
+    component encoder 
+    encoder-->video_database: ssh
+}
+
+cloud AWS {
+    component "HLS server" as hls
+}
+hls->encoder
+actor user
+user-hls
+user-een
+webserver .. hls: authentication
+@enduml
