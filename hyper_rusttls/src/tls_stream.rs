@@ -1,13 +1,16 @@
+use futures_util::ready;
+use hyper::server::{
+    accept::Accept,
+    conn::{AddrIncoming, AddrStream},
+};
+use std::future::Future;
 use std::{
     io,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
-use std::future::Future;
-use futures_util::ready;
-use hyper::server::{accept::Accept, conn::{AddrStream, AddrIncoming}};
-use tokio::io::{AsyncRead, ReadBuf, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_rustls::rustls::ServerConfig;
 enum State {
     Handshaking(tokio_rustls::Accept<AddrStream>),

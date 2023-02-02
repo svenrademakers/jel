@@ -14,13 +14,15 @@ use std::{
 
 pub struct StreamsService {
     stream_store: Arc<LocalStreamStore>,
+    base_url: String,
     dev_mode: bool,
 }
 
 impl StreamsService {
-    pub fn new(stream_store: Arc<LocalStreamStore>, dev_mode: bool) -> Self {
+    pub fn new<T: Into<String>>(stream_store: Arc<LocalStreamStore>, host: T, dev_mode: bool) -> Self {
         StreamsService {
             stream_store,
+            base_url: format!("{}/streams",host.into()),
             dev_mode,
         }
     }
@@ -45,6 +47,17 @@ impl StreamsService {
             .body(Body::empty())
             .unwrap())
     }
+fn preflight_response(&self) -> http::Response<Body> {
+    http::Response::builder()
+        .status(http::StatusCode::NO_CONTENT)
+        .header(http::header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Length, Content-Type, Range")
+        .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
+        .header(http::header::CONTENT_TYPE, "text/plain charset=UTF-8")
+        .header(http::header::CONTENT_LENGTH, "0")
+        .body(Body::empty())
+        .unwrap()
+}
 }
 
 impl Display for StreamsService {
@@ -53,16 +66,6 @@ impl Display for StreamsService {
     }
 }
 
-fn preflight_response() -> http::Response<Body> {
-    http::Response::builder()
-        .status(http::StatusCode::NO_CONTENT)
-        .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
-        .header(http::header::CONTENT_TYPE, "text/plain charset=UTF-8")
-        .header(http::header::CONTENT_LENGTH, "0")
-        .body(Body::empty())
-        .unwrap()
-}
 
 #[async_trait]
 impl RequestHandler for StreamsService {
@@ -71,19 +74,23 @@ impl RequestHandler for StreamsService {
         request: http::Request<hyper::Body>,
     ) -> std::io::Result<http::Response<hyper::Body>> {
         if request.method() == http::Method::OPTIONS {
-            return Ok(preflight_response());
+            return Ok(self.preflight_response());
         }
 
         let cursor = request.uri().path()[1..].find('/').unwrap() + 2;
         match &request.uri().path()[cursor..] {
             "test" if self.dev_mode => self.test().await,
-            "all" => as_json_response(&self.stream_store.get_available_streams("streams").await),
+            "all" => as_json_response(&self.stream_store.get_available_streams(&self.base_url).await),
             file => {
                 let data = self.stream_store.get_segment(file).await.unwrap();
                 let mut response = http::response::Builder::new()
                     .header(http::header::CACHE_CONTROL, "no-cache")
                     .header(http::header::ACCEPT_ENCODING, "identity")
-                    .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "'*' always")
+                    .header(http::header::ACCEPT_RANGES, "bytes")
+                    .header(http::header::ACCESS_CONTROL_ALLOW_HEADERS, "*")
+                    .header(http::header::ACCESS_CONTROL_ALLOW_METHODS, "POST, GET, OPTIONS")
+                    .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                    .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
                     .header(
                         http::header::ACCESS_CONTROL_EXPOSE_HEADERS,
                         "Content-Length",

@@ -41,10 +41,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         )));
     }
 
-    let host = format!("www.{}", config.hostname());
-
     if cli.now {
-        execute(&script_path, &host, config.www_dir());
+        execute(&script_path, config.hostname(), config.www_dir());
         return Ok(());
     }
 
@@ -53,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     loop {
         info!("waking up in {:?}", duration);
         thread::sleep(duration);
-        execute(&script_path, &host, config.www_dir());
+        execute(&script_path, config.hostname(), config.www_dir());
     }
 }
 

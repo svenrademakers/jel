@@ -67,7 +67,7 @@ where
 
 async fn redirect_server(hostname: &str, addres: SocketAddr) -> Result<(), hyper::Error> {
     let make_svc = make_service_fn(|_conn| {
-        let redirect_location = format!("https://www.{}", hostname);
+        let redirect_location = format!("https://{}", hostname);
         let service = service_fn(move |req| {
             let location = redirect_location.clone();
             async move {

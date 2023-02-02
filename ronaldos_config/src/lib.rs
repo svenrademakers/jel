@@ -56,7 +56,7 @@ config_definitions!(
     api_key: String = String::new(),
     video_dir: PathBuf = PathBuf::from(format!("{}/videos", DEFAULT_DATA)),
     login: Login = Default::default(),
-    hostname: String = String::new(),
+    hostname: String = String::from("localhost"),
     interval_days: u64 = 7
 );
 

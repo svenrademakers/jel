@@ -5,7 +5,7 @@ mod services;
 
 use crate::middleware::{FootballApi, LocalStreamStore};
 use crate::services::{FileService, FixtureService, SessionMananger, StreamsService};
-use clap::{ValueEnum, Parser};
+use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
 use hyper_rusttls::run_server;
@@ -65,14 +65,19 @@ async fn application_main(config: Config) -> Result<(), Error> {
         false => Some(SessionMananger::new(config.login())),
         true => None,
     };
-    
-    let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
-    service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
-    service_context.append_service(FileService::new(config.www_dir()).await?);
-    service_context.append_service(StreamsService::new(recordings_disk, *config.verbose()));
+
     let address = format!("{}:{}", config.host(), config.port())
         .parse()
         .unwrap();
+    let host = format!("https://{}", config.hostname());
+    let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
+    service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
+    service_context.append_service(FileService::new(config.www_dir()).await?);
+    service_context.append_service(StreamsService::new(
+        recordings_disk,
+        host,
+        *config.verbose(),
+    ));
     let tls_cfg = load_server_config(config.certificates(), config.private_key());
 
     if let Err(e) = run_server(

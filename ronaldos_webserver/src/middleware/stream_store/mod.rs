@@ -195,7 +195,7 @@ impl LocalStreamStore {
     /// # Return
     ///
     /// vector of registered streams
-    pub async fn get_available_streams(&self, prefix: &'static str) -> Vec<Stream> {
+    pub async fn get_available_streams(&self, prefix: &str) -> Vec<Stream> {
         let mut map: Vec<Stream> = self
             .stream_map
             .read()
@@ -257,8 +257,12 @@ impl LocalStreamStore {
 }
 
 /// Adds a given url as prefix to the current base url. This base url is
-fn prepend_prefix(mut stream: Stream, prefix: &'static str) -> Stream {
-    for source in stream.sources.iter_mut() {
+fn prepend_prefix(mut stream: Stream, prefix: &str) -> Stream {
+    for source in stream
+        .sources
+        .iter_mut()
+        .filter(|s| !s.url.starts_with("http:") && !s.url.starts_with("https:"))
+    {
         let full = PathBuf::from(prefix).join(source.url.clone());
         source.url = full;
     }

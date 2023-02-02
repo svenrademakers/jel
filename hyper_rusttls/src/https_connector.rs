@@ -1,7 +1,7 @@
-use std::{sync::Arc, task::Poll};
 use futures_util::future::BoxFuture;
 use http::Uri;
 use hyper::{client::HttpConnector, service::Service};
+use std::{sync::Arc, task::Poll};
 use tokio_rustls::TlsConnector;
 
 use crate::tls_client_stream::TlsClientStream;

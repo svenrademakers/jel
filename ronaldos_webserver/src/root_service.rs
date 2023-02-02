@@ -22,7 +22,6 @@ impl RequestHandler for RootService {
             Err(response) => return Ok(response),
         };
 
-
         let path = first_segment_uri(&request).unwrap_or("/");
         let handler = self
             .services
