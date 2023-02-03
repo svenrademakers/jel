@@ -4,7 +4,7 @@ use chrono::{serde::ts_seconds, DateTime, Utc};
 use http::{Request, Uri};
 use hyper::{body, Body, Client};
 use hyper_rusttls::https_connector::HttpsConnector;
-use log::debug;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, io::Write, str::FromStr, sync::Arc};
@@ -49,6 +49,10 @@ impl FootballApi {
         let mut write_cache = self.cache.write().await;
         // load cache on first request
         if write_cache.is_empty() {
+            if self.api_key.is_empty(){
+                info!("no football api key set. omitting fixture data");
+                return Ok(());
+            }
             debug!("cache not loaded yet, sending football request");
             let raw = football_api_request(&self.url, &self.api_key).await?;
             let mut map = to_data_model(raw).await?;

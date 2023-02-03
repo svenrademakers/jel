@@ -66,7 +66,6 @@ impl Display for StreamsService {
     }
 }
 
-
 #[async_trait]
 impl RequestHandler for StreamsService {
     async fn invoke(

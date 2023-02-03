@@ -20,12 +20,12 @@ serde_json= "*"
 serde = { version = "*", features = ["derive"] }
 syslog = "*"
 once_cell = "*"
-base64="0.13.*"
+base64="*"
 serde_yaml="*"
 hyper_rusttls = { path= "../hyper_rusttls" }
 chrono = { version = "*", features = ["serde"] }
 regex = "*"
-notify = "4.*"
+notify = "*"
 uuid = { version= "*", features = ["v4", "serde"] }
 anyhow = "*"
 

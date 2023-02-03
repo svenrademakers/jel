@@ -79,7 +79,9 @@ where
         }
         trace!(
             "{:?} first:{:?}, last:{:?}",
-            self.node_info, self.first, self.last
+            self.node_info,
+            self.first,
+            self.last
         );
         self.storage[index] = item;
         &self.storage[index]
