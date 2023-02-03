@@ -1,20 +1,19 @@
 pub mod data_types;
-mod file_watcher;
 
 use self::data_types::*;
 use super::cache_map::CacheMap;
 use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
+use notify::{RecommendedWatcher, recommended_watcher, RecursiveMode, EventKind, Watcher};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
     hash::Hash,
-    path::{Path, PathBuf},
-    sync::Arc,
+    path::{Path, PathBuf}, sync::Arc,
 };
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc::{Receiver, channel}};
 use uuid::Uuid;
 
 /// Provides video streams that are persisted on the filesystem. Even given they
@@ -44,7 +43,7 @@ pub struct LocalStreamStore {
     /// 3 way cache, caching streams optimized for the 3 different bitrate levels.
     file_cache: RwLock<CacheMap<Path, Bytes, 128>>,
     /// This watcher object is used to exit the watcher task.
-    watcher_sender: Option<tokio::sync::oneshot::Sender<()>>,
+    file_watcher: Option<RecommendedWatcher>,
 }
 
 impl LocalStreamStore {
@@ -59,43 +58,87 @@ impl LocalStreamStore {
             stream_map: RwLock::new(BTreeMap::default()),
             uuid_lookup: RwLock::new(BTreeMap::default()),
             file_cache: RwLock::new(CacheMap::new()),
-            watcher_sender: None,
+            file_watcher: None,
         })
     }
 
     pub fn run(instance: &mut Arc<LocalStreamStore>) {
-        let (kill_sender, kill_receiver) = tokio::sync::oneshot::channel();
-
-        let value =
-            Arc::get_mut(instance).expect("LocalStreamStore cannot be shared before run call");
-        value.watcher_sender = Some(kill_sender);
+        let mut receiver = Self::start_filewatcher(instance);
 
         // spawn loading task
         let loading_instance = instance.clone();
         tokio::spawn(async move {
             loading_instance
-                .load(loading_instance.root.to_path_buf())
+                .load(&[loading_instance.root.to_path_buf(); 1])
                 .await
                 .unwrap();
         });
 
         // spawn file watcher task
-        Self::watch_for_changes(instance.clone(), kill_receiver);
+        let watch_instance = instance.clone();
+        tokio::spawn(async move {
+            while let Some(event) = receiver.recv().await {
+                watch_instance.handle_debounce_event(event).await;
+            }
+        });
+    }
+
+    fn start_filewatcher(instance: &mut Arc<LocalStreamStore>)-> Receiver<notify::Event>{
+        let (sender, receiver) = channel(32);
+        let handle_notify_receiver = move |res| {
+            let event = match res {
+                Ok(event) => event,
+                Err(e) => { error!("cannot handle notify event because {}", e);
+                    return;
+                },
+            };
+            trace!("received {:?}", &event);
+            if let Err(e) = sender.blocking_send(event){
+                warn!("channel failure to filewatcher: {}", e);
+            }
+        };
+
+        let mut watcher = recommended_watcher(handle_notify_receiver).unwrap();
+        watcher.watch(&instance.root, RecursiveMode::NonRecursive).unwrap();
+        let mut_instance =
+            Arc::get_mut(instance).expect("LocalStreamStore is not allowed to be shared before run call");
+        mut_instance.file_watcher = Some(watcher);
+        receiver
+    }
+
+    async fn handle_debounce_event(
+        &self,
+        event: notify::event::Event,
+        ) {
+        let paths = event.paths;
+        let result: Result<()> = match event.kind {
+            EventKind::Create(_) | EventKind::Modify(_) => self.load(&paths).await,
+            EventKind::Remove(_) => {
+                self.removed(&paths).await.then(|| ()).context("nothing removed")
+            }
+            //          DebouncedEvent::Rename(rem, add) => {
+            //              stream_store.removed(rem).await;
+            //              stream_store.load(add).await
+            //          }
+            _ => Ok(()),
+        };
+
+        if let Err(e) = result {
+            warn!("failed handling event: {}", e);
+        }
     }
 
     /// Load a .stream meta file from disk. path can be a directory or a file.
     /// note that recursive scanning is disabled. see [LocalStreamStore::scan]
-    async fn load(&self, path: PathBuf) -> Result<()> {
+    async fn load(&self, paths: &[PathBuf]) -> Result<()> {
         let mut lookup = Vec::new();
-        let new_meta_files = self
-            .scan(&path)
-            .await?
-            .map(|(p, meta)| {
+        let mut new_meta_files = Vec::new();
+        for path in paths {
+            new_meta_files.extend(self.scan(&path).await?.map(|(p, meta)| {
                 lookup.push((p, meta.uuid));
                 (meta.uuid, meta.into())
-            })
-            .collect::<Vec<(Uuid, Stream)>>();
-
+            }));
+        }
         self.uuid_lookup.write().await.extend(lookup);
         self.stream_map.write().await.extend(new_meta_files);
         Ok(())
@@ -165,22 +208,23 @@ impl LocalStreamStore {
         Ok((path.to_path_buf(), stream))
     }
 
-    pub async fn removed(&self, path: PathBuf) -> bool {
-        if path.extension() != Some(OsStr::new("stream")) {
-            return false;
-        }
+    pub async fn removed(&self, paths: &[PathBuf]) -> bool {
+        let mut removed_count = 0;
+        let files = paths.iter().filter(|f| f.extension() == Some(OsStr::new("stream")));
 
         let lookup = self.uuid_lookup.read().await;
-        let uuid = match lookup.get(&path) {
-            Some(val) => val,
-            None => {
-                return false;
-            }
-        };
+        for file in files {
+            let uuid = match lookup.get(file) {
+                Some(val) => val,
+                None => continue,
+            };
 
-        let removed = self.stream_map.write().await.remove(uuid).is_some();
-        debug!("removed {} {} from cache", path.to_string_lossy(), uuid);
-        removed
+            if let Some(_) = self.stream_map.write().await.remove(uuid){
+                debug!("removed {} {} from cache", file.to_string_lossy(), uuid);
+                removed_count += 1;
+            }
+        }
+        removed_count > 0
     }
 
     /// Returns a list of all available streams ready for playback sorted by on

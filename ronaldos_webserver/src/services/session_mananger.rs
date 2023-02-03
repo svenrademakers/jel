@@ -6,7 +6,8 @@ use hyper_rusttls::service::RequestHandler;
 use log::debug;
 use ronaldos_config::Login;
 use std::{fmt::Display, ops::Add};
-
+use base64::engine::general_purpose::URL_SAFE;
+use base64::Engine;
 const SESSION_ID_KEY: &str = "Session_id";
 
 #[derive(Debug, Clone)]
@@ -18,8 +19,9 @@ impl SessionMananger {
     pub fn new(login: &Login) -> Self {
         let session_id: String = format!("username={}&password={}", login.username, login.password);
         debug!("raw session id: {}", session_id);
-        let encoded = base64::encode_config(session_id, base64::URL_SAFE);
-        debug!("session cookie: {}", &encoded);
+        let mut encoded = String::new();
+        URL_SAFE.encode_string(session_id, &mut encoded);
+        debug!("session cookie: {}", encoded);
         SessionMananger { encoded }
     }
 
@@ -86,7 +88,7 @@ impl SessionMananger {
 
     fn create_session(&self, data: &[u8]) -> Option<String> {
         let utf8_body = std::str::from_utf8(data).unwrap();
-        let encoded = base64::encode_config(utf8_body, base64::URL_SAFE);
+        let encoded = URL_SAFE.encode(utf8_body);
         debug!("encoded session: {}", encoded);
         if encoded == self.encoded {
             return Some(encoded);
@@ -162,7 +164,7 @@ impl RequestHandler for SessionMananger {
                 if let Some(session) = self.create_session(&body) {
                     response = redirect_ok_response(&session);
                 } else {
-                    debug!("authentication failed ");
+                    debug!("authentication failed.");
                     response = http::Response::builder()
                         .status(http::StatusCode::FORBIDDEN)
                         .body(Body::from("password or username not correct!"))
