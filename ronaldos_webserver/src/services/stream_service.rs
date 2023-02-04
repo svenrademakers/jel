@@ -52,7 +52,10 @@ impl StreamsService {
     fn preflight_response(&self) -> http::Response<Body> {
         http::Response::builder()
             .status(http::StatusCode::NO_CONTENT)
-            .header(http::header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Length, Content-Type, Range")
+            .header(
+                http::header::ACCESS_CONTROL_ALLOW_HEADERS,
+                "Content-Length, Content-Type, Range",
+            )
             .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
             .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
             .header(http::header::CONTENT_TYPE, "text/plain charset=UTF-8")
@@ -89,7 +92,10 @@ impl RequestHandler for StreamsService {
                     .header(http::header::ACCEPT_ENCODING, "identity")
                     .header(http::header::ACCEPT_RANGES, "bytes")
                     .header(http::header::ACCESS_CONTROL_ALLOW_HEADERS, "*")
-                    .header(http::header::ACCESS_CONTROL_ALLOW_METHODS, "POST, GET, OPTIONS")
+                    .header(
+                        http::header::ACCESS_CONTROL_ALLOW_METHODS,
+                        "POST, GET, OPTIONS",
+                    )
                     .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                     .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
                     .header(

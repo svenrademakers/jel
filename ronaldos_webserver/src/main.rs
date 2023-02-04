@@ -3,18 +3,19 @@ mod logger;
 
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
-use crate::middleware::{FootballApi, LocalStreamStore};
-use crate::services::{FileService, FixtureService, SessionMananger, StreamsService};
+use anyhow::Context;
 use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
 use hyper_rusttls::tls_config::load_server_config;
 
-use handlers::authentication::RonaldoAuthentication;
+//use handlers::authentication::RonaldoAuthentication;
 use handlers::redirect_service::RedirectScheme;
+use log::info;
 use logger::init_log;
 use ronaldos_config::{get_application_config, Config};
-use std::io::{self, Error, ErrorKind};
+use std::fmt::format;
+use std::io::{self, ErrorKind};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
@@ -38,7 +39,7 @@ pub enum DeamonAction {
     RESTART,
 }
 
-fn main() -> io::Result<()> {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let config = get_application_config(&cli.config);
     let log_level = match config.verbose() {
@@ -49,14 +50,14 @@ fn main() -> io::Result<()> {
 
     #[cfg(not(windows))]
     if let Some(option) = cli.daemon {
-        daemonize(option).ok_or(Error::new(ErrorKind::Other, "fatal"))?;
+        daemonize(option).ok_or(std::io::Error::new(ErrorKind::Other, "fatal"))?;
     }
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move { application_main(Arc::new(config)).await })
 }
 
-async fn application_main(config: Arc<Config>) -> anyhow::Result<(), Error> {
+async fn application_main(config: Arc<Config>) -> anyhow::Result<()> {
    // let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
    // LocalStreamStore::run(&mut recordings_disk);
 
@@ -67,12 +68,9 @@ async fn application_main(config: Arc<Config>) -> anyhow::Result<(), Error> {
    //     true => None,
    // };
 
-    let address: SocketAddr = format!("{}:{}", config.host(), config.port())
-        .parse()
-        .unwrap();
-    let host = format!("https://{}", config.hostname());
-        .parse()
-        .unwrap();
+    let addr_str = format!("{}:{}", config.host(), config.port());
+    let address: SocketAddr = addr_str
+        .parse().with_context(||format!("could not parse {} to socket address", addr_str))?;
     let tls_cfg = load_server_config(config.certificates(), config.private_key());
     let tls_enabled = tls_cfg.is_ok();
     let cfg = config.clone();
@@ -80,7 +78,7 @@ async fn application_main(config: Arc<Config>) -> anyhow::Result<(), Error> {
     let build_server = HttpServer::new(move || {
         App::new() //.wrap(RedirectSchemeBuilder::new().build())
             .wrap(RedirectScheme::new(tls_enabled))
-            .wrap(RonaldoAuthentication::new())
+            //.wrap(RonaldoAuthentication::new())
             .app_data(cfg.clone())
             .service(
                 Files::new("/", cfg.www_dir())
@@ -88,12 +86,14 @@ async fn application_main(config: Arc<Config>) -> anyhow::Result<(), Error> {
             )
     });
 
+    let tls_enabled = if tls_enabled { "enabled"} else {"disabled"};
+    info!("starting server on {:?} tls={} ", address, tls_enabled );
+
     let server = match tls_cfg {
         Ok(cfg) => build_server.bind_rustls(address, cfg)?,
         Err(_) => build_server.bind(address)?,
     };
-
-    server.run().await
+    server.run().await.context("runtime error")
 }
 
 #[cfg(not(windows))]
