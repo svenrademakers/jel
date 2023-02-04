@@ -28,15 +28,16 @@ impl StreamsService {
     }
 
     async fn test(&self) -> std::io::Result<http::Response<hyper::Body>> {
+        static GTEST_VID : &str = "https://commondatastorage.googleapis.com/gtv-videos-bucket/CastVideos/hls/DesigningForGoogleCast.m3u8";
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
-        let number = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let number = COUNTER.fetch_add(1, Ordering::Relaxed);
 
         let test_description = format!("this is a test {}", number);
 
         self.stream_store
             .register(
                 test_description,
-                vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
+                vec![PathBuf::from(GTEST_VID), PathBuf::from("test1.m3u8")],
                 chrono::Utc::now(),
             )
             .await
@@ -47,17 +48,18 @@ impl StreamsService {
             .body(Body::empty())
             .unwrap())
     }
-fn preflight_response(&self) -> http::Response<Body> {
-    http::Response::builder()
-        .status(http::StatusCode::NO_CONTENT)
-        .header(http::header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Length, Content-Type, Range")
-        .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
-        .header(http::header::CONTENT_TYPE, "text/plain charset=UTF-8")
-        .header(http::header::CONTENT_LENGTH, "0")
-        .body(Body::empty())
-        .unwrap()
-}
+
+    fn preflight_response(&self) -> http::Response<Body> {
+        http::Response::builder()
+            .status(http::StatusCode::NO_CONTENT)
+            .header(http::header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Length, Content-Type, Range")
+            .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+            .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
+            .header(http::header::CONTENT_TYPE, "text/plain charset=UTF-8")
+            .header(http::header::CONTENT_LENGTH, "0")
+            .body(Body::empty())
+            .unwrap()
+    }
 }
 
 impl Display for StreamsService {
@@ -79,7 +81,7 @@ impl RequestHandler for StreamsService {
         let cursor = request.uri().path()[1..].find('/').unwrap() + 2;
         match &request.uri().path()[cursor..] {
             "test" if self.dev_mode => self.test().await,
-            "all" => as_json_response(&self.stream_store.get_available_streams(&self.base_url).await),
+            "all" => as_json_response(&self.stream_store.get_available_streams("streams").await),
             file => {
                 let data = self.stream_store.get_segment(file).await.unwrap();
                 let mut response = http::response::Builder::new()
