@@ -1,14 +1,11 @@
 use std::future::{ready, Ready};
 
 use actix_web::{
-    body::{BoxBody, EitherBody},
-    dev::{Response, Service, ServiceRequest, ServiceResponse, Transform},
+    body::EitherBody,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform},
     http, Error, HttpResponse,
 };
-use futures_util::{
-    future::{ok, Either, LocalBoxFuture},
-    FutureExt,
-};
+use futures_util::future::LocalBoxFuture;
 
 pub struct RedirectScheme {
     enabled: bool,

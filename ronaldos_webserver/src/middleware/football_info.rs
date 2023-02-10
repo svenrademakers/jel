@@ -1,9 +1,8 @@
+use actix_tls::connect::rustls::webpki_roots_cert_store;
+use actix_web::http::{self, Uri};
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use chrono::{serde::ts_seconds, DateTime, Utc};
-use http::{Request, Uri};
-use hyper::{body, Body, Client};
-use hyper_rusttls::https_connector::HttpsConnector;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -29,27 +28,25 @@ pub struct FootballApi {
 }
 
 impl FootballApi {
-    pub async fn new(season: &str, team: &str, api_key: String) -> Arc<Self> {
+    pub async fn new(season: &str, team: &str, api_key: String) -> Self {
         let api_uri = http::Uri::from_str(&format!(
             "https://api-football-v1.p.rapidapi.com/v3/fixtures?season={}&team={}",
             season, team
         ))
         .unwrap();
 
-        let instance = Arc::new(FootballApi {
+        FootballApi {
             cache: RwLock::new(BTreeMap::new()),
             url: api_uri,
             api_key,
-        });
-
-        instance
+        }
     }
 
     pub async fn fixtures<T: Write>(&self, writer: &mut T) -> Result<()> {
         let mut write_cache = self.cache.write().await;
         // load cache on first request
         if write_cache.is_empty() {
-            if self.api_key.is_empty(){
+            if self.api_key.is_empty() {
                 info!("no football api key set. omitting fixture data");
                 return Ok(());
             }
@@ -65,9 +62,7 @@ impl FootballApi {
     }
 }
 
-async fn to_data_model(bytes: Bytes) -> Result<BTreeMap<String, Vec<Value>>> {
-    let json: serde_json::Value = serde_json::from_slice(&bytes)?;
-
+async fn to_data_model(json: serde_json::Value) -> Result<BTreeMap<String, Vec<Value>>> {
     let mut fixtures: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for fixt in json["response"]
         .as_array()
@@ -102,17 +97,21 @@ async fn to_data_model(bytes: Bytes) -> Result<BTreeMap<String, Vec<Value>>> {
     Ok(fixtures)
 }
 
-async fn football_api_request(url: &Uri, api_key: &str) -> Result<Bytes> {
+async fn football_api_request(url: &Uri, api_key: &str) -> anyhow::Result<serde_json::Value> {
     debug!("downloading match data from football-api");
-    let https = HttpsConnector::new();
-    let client = Client::builder().build::<_, hyper::Body>(https);
-    let request = Request::builder()
-        .method(hyper::Method::GET)
-        .uri(url)
-        .header("X-RapidAPI-Host", "api-football-v1.p.rapidapi.com")
-        .header("X-RapidAPI-Key", api_key)
-        .body(Body::empty())
-        .unwrap();
-    let res = client.request(request).await?;
-    Ok(body::to_bytes(res.into_body()).await?)
+    let config = rustls::client::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(webpki_roots_cert_store())
+        .with_no_client_auth();
+    let client = awc::Client::builder()
+        .connector(awc::Connector::new().rustls(Arc::new(config)))
+        .finish();
+    let request = client
+        .get(url)
+        .insert_header(("X-RapidAPI-Host", "api-football-v2.p.rapidapi.com"))
+        .insert_header(("X-RapidAPI-Key", api_key));
+    let mut res = request.send().await.unwrap();
+    res.json::<serde_json::Value>()
+        .await
+        .context("not a valid json reponse body")
 }

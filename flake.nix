@@ -81,9 +81,9 @@
             RUST_TARGET = target;
             nativeBuildInputs = [ rustToolchain ronaldo-streaming opkg-utils buildPackages.python39 ];
             installPhase = ''
-# workaround to call opkg scripts. They are loaded into the PATH
-# environment correctly, but the included shebangs cannot be
-# resolved by the nix environment.
+              # workaround to call opkg scripts. They are loaded into the PATH
+              # environment correctly, but the included shebangs cannot be
+              # resolved by the nix environment.
               export OPKG_ROOT=${opkg-utils.out}/bin
               python3 create_ipk_packages.py -m ${ronaldo-streaming.src} -b ${ronaldo-streaming.out} $out ${ronaldo-streaming.www}
             '';

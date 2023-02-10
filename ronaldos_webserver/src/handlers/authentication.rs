@@ -1,5 +1,3 @@
-use std::future::{ready, Ready};
-
 use actix_service::{Service, Transform};
 use actix_web::{
     body::EitherBody,

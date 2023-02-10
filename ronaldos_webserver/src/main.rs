@@ -1,6 +1,7 @@
 mod handlers;
 mod logger;
-
+//mod services;
+mod middleware;
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use anyhow::Context;
@@ -8,18 +9,21 @@ use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
 use hyper_rusttls::tls_config::load_server_config;
-
 //use handlers::authentication::RonaldoAuthentication;
-use handlers::redirect_service::RedirectScheme;
+//use handlers::redirect_service::RedirectScheme;
 use log::info;
 use logger::init_log;
 use ronaldos_config::{get_application_config, Config};
-use std::fmt::format;
-use std::io::{self, ErrorKind};
+
+use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
+
+use middleware::LocalStreamStore;
+
+use crate::handlers::redirect_service::{self, RedirectScheme};
+use crate::middleware::FootballApi;
 
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
@@ -54,45 +58,52 @@ fn main() -> anyhow::Result<()> {
     }
 
     let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async move { application_main(Arc::new(config)).await })
+    rt.block_on(async move { application_main(web::Data::new(config)).await })
 }
 
-async fn application_main(config: Arc<Config>) -> anyhow::Result<()> {
-   // let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
-   // LocalStreamStore::run(&mut recordings_disk);
+async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
+    let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
+    LocalStreamStore::run(&mut recordings_disk);
 
-   // let football_api = FootballApi::new("2022", "1853", config.api_key().clone()).await;
+    let football_api =
+        web::Data::new(FootballApi::new("2022", "1853", config.api_key().clone()).await);
 
-   // let service_manager = match config.login().username.is_empty() {
-   //     false => Some(SessionMananger::new(config.login())),
-   //     true => None,
-   // };
+    // let service_manager = match config.login().username.is_empty() {
+    //     false => Some(SessionMananger::new(config.login())),
+    //     true => None,
+    // };
 
     let addr_str = format!("{}:{}", config.host(), config.port());
-    let address: SocketAddr = addr_str
-        .parse().with_context(||format!("could not parse {} to socket address", addr_str))?;
+    let sock_address: SocketAddr = addr_str
+        .parse()
+        .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
     let tls_cfg = load_server_config(config.certificates(), config.private_key());
     let tls_enabled = tls_cfg.is_ok();
     let cfg = config.clone();
 
-    let build_server = HttpServer::new(move || {
-        App::new() //.wrap(RedirectSchemeBuilder::new().build())
+    let index_file = cfg.www_dir().join("index.html");
+    assert!(index_file.exists());
+
+    let mut server = HttpServer::new(move || {
+        App::new()
             .wrap(RedirectScheme::new(tls_enabled))
-            //.wrap(RonaldoAuthentication::new())
             .app_data(cfg.clone())
+            .app_data(recordings_disk.clone())
+            .app_data(football_api.clone())
             .service(
                 Files::new("/", cfg.www_dir())
-                    .index_file(cfg.www_dir().join("index.html").to_string_lossy()),
+                    .show_files_listing()
+                    .index_file(index_file.to_string_lossy()),
             )
     });
 
-    let tls_enabled = if tls_enabled { "enabled"} else {"disabled"};
-    info!("starting server on {:?} tls={} ", address, tls_enabled );
+    let tls_enabled = if tls_enabled { "enabled" } else { "disabled" };
+    info!("starting server on {:?} tls={} ", sock_address, tls_enabled);
 
-    let server = match tls_cfg {
-        Ok(cfg) => build_server.bind_rustls(address, cfg)?,
-        Err(_) => build_server.bind(address)?,
+    if let Ok(cfg) = tls_cfg {
+        server = server.bind_rustls(sock_address, cfg)?;
     };
+    server = server.bind(sock_address)?;
     server.run().await.context("runtime error")
 }
 

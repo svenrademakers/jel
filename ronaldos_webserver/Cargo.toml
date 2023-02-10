@@ -27,7 +27,10 @@ anyhow = "*"
 actix-web = { version = "*", features = ["rustls"] }
 actix-files = "*"
 actix-service = "*"
+actix-tls = { version = "*", features = ["rustls"] }
 hyper_rusttls = { path= "../hyper_rusttls" }
+rustls = "*"
+awc = { version = "*", features = ["rustls"] }
 
 [target.'cfg(not(windows))'.dependencies]
 daemonize = "*"

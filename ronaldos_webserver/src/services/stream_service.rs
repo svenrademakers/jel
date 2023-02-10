@@ -1,37 +1,57 @@
 use super::{as_json_response, lookup_content_type};
 use crate::middleware::LocalStreamStore;
-use async_trait::async_trait;
-use hyper::Body;
-use hyper_rusttls::service::RequestHandler;
+use actix_service::{Transform, Service};
+use actix_web::{dev::{ServiceRequest, ServiceResponse}, Error, body::EitherBody, HttpResponse, http::{StatusCode, header}, error::HttpError, post};
+use futures_util::future::LocalBoxFuture;
 use std::{
     fmt::Display,
     path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
-    },
+    }, future::{Ready, ready},
 };
 
-pub struct StreamsService {
+pub struct StreamsService{
     stream_store: Arc<LocalStreamStore>,
     base_url: String,
     dev_mode: bool,
 }
 
-impl StreamsService {
-    pub fn new<T: Into<String>>(stream_store: Arc<LocalStreamStore>, host: T, dev_mode: bool) -> Self {
-        StreamsService {
-            stream_store,
-            base_url: format!("{}/streams",host.into()),
-            dev_mode,
-        }
-    }
+impl<S, B> Transform<S, ServiceRequest> for StreamsService
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<EitherBody<B>>;
+    type Error = Error;
+    type InitError = ();
+    type Transform = StreamServiceResponse<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
-    async fn test(&self) -> std::io::Result<http::Response<hyper::Body>> {
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(StreamServiceResponse {service, 
+            stream_store: self.stream_store,
+            base_url: self.base_url,
+            dev_mode: self.dev_mode
+        }))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamServiceResponse<S>{
+    service: S,
+    stream_store: Arc<LocalStreamStore>,
+    base_url: String,
+    dev_mode: bool,
+}
+
+impl<S> StreamServiceResponse<S> {
+    async fn test(&self) -> HttpResponse {
         static GTEST_VID : &str = "https://commondatastorage.googleapis.com/gtv-videos-bucket/CastVideos/hls/DesigningForGoogleCast.m3u8";
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let number = COUNTER.fetch_add(1, Ordering::Relaxed);
-
         let test_description = format!("this is a test {}", number);
 
         self.stream_store
@@ -43,81 +63,81 @@ impl StreamsService {
             .await
             .unwrap();
 
-        Ok(http::response::Builder::new()
-            .status(http::StatusCode::OK)
-            .body(Body::empty())
-            .unwrap())
+        HttpResponse::Ok().finish()
     }
 
-    fn preflight_response(&self) -> http::Response<Body> {
-        http::Response::builder()
-            .status(http::StatusCode::NO_CONTENT)
-            .header(
-                http::header::ACCESS_CONTROL_ALLOW_HEADERS,
+}
+
+#[post("/")]
+fn preflight_response() -> HttpResponse {
+    HttpResponse::build(StatusCode::NO_CONTENT)
+        .append_header((
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
                 "Content-Length, Content-Type, Range",
-            )
-            .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-            .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
-            .header(http::header::CONTENT_TYPE, "text/plain charset=UTF-8")
-            .header(http::header::CONTENT_LENGTH, "0")
-            .body(Body::empty())
-            .unwrap()
-    }
+                ))
+        .append_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
+        .append_header((header::ACCESS_CONTROL_MAX_AGE, "1728000"))
+        .append_header((header::CONTENT_TYPE, "text/plain charset=UTF-8"))
+        .append_header((header::CONTENT_LENGTH, "0"))
+        .finish()
 }
 
-impl Display for StreamsService {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Stream Service")
-    }
-}
+impl<S, B> Service<ServiceRequest> for StreamServiceResponse<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<EitherBody<B>>;
+    type Error = Error;
+    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
 
-#[async_trait]
-impl RequestHandler for StreamsService {
-    async fn invoke(
-        &self,
-        request: http::Request<hyper::Body>,
-    ) -> std::io::Result<http::Response<hyper::Body>> {
-        if request.method() == http::Method::OPTIONS {
-            return Ok(self.preflight_response());
-        }
+    actix_service::forward_ready!(service);
 
-        let cursor = request.uri().path()[1..].find('/').unwrap() + 2;
-        match &request.uri().path()[cursor..] {
-            "test" if self.dev_mode => self.test().await,
-            "all" => as_json_response(&self.stream_store.get_available_streams("streams").await),
-            file => {
-                let data = self.stream_store.get_segment(file).await.unwrap();
-                let mut response = http::response::Builder::new()
-                    .header(http::header::CACHE_CONTROL, "no-cache")
-                    .header(http::header::ACCEPT_ENCODING, "identity")
-                    .header(http::header::ACCEPT_RANGES, "bytes")
-                    .header(http::header::ACCESS_CONTROL_ALLOW_HEADERS, "*")
-                    .header(
-                        http::header::ACCESS_CONTROL_ALLOW_METHODS,
-                        "POST, GET, OPTIONS",
-                    )
-                    .header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                    .header(http::header::ACCESS_CONTROL_MAX_AGE, "1728000")
-                    .header(
-                        http::header::ACCESS_CONTROL_EXPOSE_HEADERS,
-                        "Content-Length",
-                    )
-                    .header(http::header::CONTENT_LENGTH, data.len());
-
-                if let Some(content_type) = lookup_content_type(file.as_ref()) {
-                    response = response.header(http::header::CONTENT_TYPE, content_type);
-                }
-
-                Ok(response.body(data.into()).unwrap())
-            }
-            _ => Ok(http::Response::builder()
-                .status(http::StatusCode::NOT_FOUND)
-                .body(Body::empty())
-                .unwrap()),
-        }
-    }
-
-    fn path() -> &'static str {
-        "streams"
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        Box::pin(async move {req.})
+//        if request.method() == Method::OPTIONS {
+//            return Ok(self.preflight_response());
+//        }
+//
+//        let cursor = request.uri().path()[1..].find('/').unwrap() + 2;
+//        match &request.uri().path()[cursor..] {
+//            "test" if self.dev_mode => self.test().await,
+//            "all" => as_json_response(
+//                &self
+//                    .stream_store
+//                    .get_available_streams(&self.base_url)
+//                    .await,
+//            ),
+//            file => {
+//                let data = self.stream_store.get_segment(file).await.unwrap();
+//                let mut response = HttpResponse::Ok()
+//                    .append_header((header::CACHE_CONTROL, "no-cache"))
+//                    .append_header((header::ACCEPT_ENCODING, "identity"))
+//                    .append_header((header::ACCEPT_RANGES, "bytes"))
+//                    .append_header((header::ACCESS_CONTROL_ALLOW_HEADERS, "*"))
+//                    .header(
+//                        header::ACCESS_CONTROL_ALLOW_METHODS,
+//                        "POST, GET, OPTIONS",
+//                    )
+//                    .append_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
+//                    .append_header((header::ACCESS_CONTROL_MAX_AGE, "1728000"))
+//                    .header(
+//                        header::ACCESS_CONTROL_EXPOSE_HEADERS,
+//                        "Content-Length",
+//                    )
+//                    .append_header((header::CONTENT_LENGTH, data.len()));
+//
+//                if let Some(content_type) = lookup_content_type(file.as_ref()) {
+//                    response = response.append_header((header::CONTENT_TYPE, content_type));
+//                }
+//
+//                Ok(response.body(data.into()).unwrap())
+//            }
+//            _ => Ok(http::Response::builder()
+//                .status(http::StatusCode::NOT_FOUND)
+//                .body(Body::empty())
+//                .unwrap()),
+//        }
     }
 }
