@@ -1,7 +1,7 @@
 mod handlers;
 mod logger;
-//mod services;
 mod middleware;
+mod services;
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use anyhow::Context;
@@ -24,6 +24,7 @@ use middleware::LocalStreamStore;
 
 use crate::handlers::redirect_service::{self, RedirectScheme};
 use crate::middleware::FootballApi;
+use crate::services::stream_service::stream_service_config;
 
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
@@ -90,6 +91,7 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
             .app_data(cfg.clone())
             .app_data(recordings_disk.clone())
             .app_data(football_api.clone())
+            .configure(stream_service_config)
             .service(
                 Files::new("/", cfg.www_dir())
                     .show_files_listing()
