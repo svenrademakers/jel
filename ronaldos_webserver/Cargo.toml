@@ -6,29 +6,36 @@ authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
 description = "Rust https server including ronaldo's own specific http services"
 
 [dependencies]
-clap = { version="*", features = ["derive"] }
-ronaldos_config = { path="../ronaldos_config" }
-tokio = { version = "*", features = ["net", "fs", "rt", "rt-multi-thread", "macros", "io-util", "sync"] }
+clap = { version = "*", features = ["derive"] }
+ronaldos_config = { path = "../ronaldos_config" }
+tokio = { version = "*", features = [
+    "net",
+    "fs",
+    "rt",
+    "rt-multi-thread",
+    "macros",
+    "io-util",
+    "sync",
+] }
 tokio-stream = { version = "*", features = ["fs"] }
-bytes = "*"
 async-trait = "*"
 log = { version = "*", features = ["std"] }
 futures-util = "*"
-serde_json= "*"
+serde_json = "*"
 serde = { version = "*", features = ["derive"] }
 once_cell = "*"
-base64="*"
-serde_yaml="*"
+base64 = "*"
+serde_yaml = "*"
 chrono = { version = "*", features = ["serde"] }
 regex = "*"
 notify = "*"
-uuid = { version= "*", features = ["v4", "serde"] }
+uuid = { version = "*", features = ["v4", "serde"] }
 anyhow = "*"
 actix-web = { version = "*", features = ["rustls"] }
 actix-files = "*"
 actix-service = "*"
 actix-tls = { version = "*", features = ["rustls"] }
-hyper_rusttls = { path= "../hyper_rusttls" }
+hyper_rusttls = { path = "../hyper_rusttls" }
 rustls = "*"
 awc = { version = "*", features = ["rustls"] }
 

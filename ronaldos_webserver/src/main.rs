@@ -2,8 +2,8 @@ mod handlers;
 mod logger;
 mod middleware;
 mod services;
-use actix_files::Files;
-use actix_web::{web, App, HttpServer};
+use actix_files::{Files, NamedFile};
+use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer};
 use anyhow::Context;
 use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
@@ -65,7 +65,7 @@ fn main() -> anyhow::Result<()> {
 async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
     LocalStreamStore::run(&mut recordings_disk);
-
+    let stream_store = web::Data::from(recordings_disk);
     let football_api =
         web::Data::new(FootballApi::new("2022", "1853", config.api_key().clone()).await);
 
@@ -89,14 +89,14 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
         App::new()
             .wrap(RedirectScheme::new(tls_enabled))
             .app_data(cfg.clone())
-            .app_data(recordings_disk.clone())
             .app_data(football_api.clone())
-            .configure(stream_service_config)
+            .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
             .service(
                 Files::new("/", cfg.www_dir())
                     .show_files_listing()
                     .index_file(index_file.to_string_lossy()),
             )
+            .service(redirect_favicon)
     });
 
     let tls_enabled = if tls_enabled { "enabled" } else { "disabled" };
@@ -107,6 +107,17 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     };
     server = server.bind(sock_address)?;
     server.run().await.context("runtime error")
+}
+
+#[get("/favicon.ico")]
+async fn redirect_favicon(request: HttpRequest, cfg: web::Data<Config>) -> HttpResponse {
+    NamedFile::open_async(format!(
+        "{}/images/favicon.ico",
+        cfg.www_dir().to_string_lossy()
+    ))
+    .await
+    .unwrap()
+    .into_response(&request)
 }
 
 #[cfg(not(windows))]

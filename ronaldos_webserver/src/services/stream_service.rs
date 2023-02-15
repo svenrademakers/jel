@@ -1,7 +1,10 @@
 use crate::middleware::LocalStreamStore;
 use actix_web::{
+    get,
     http::{self, header, StatusCode},
-    post, web, Error, HttpResponse, Responder,
+    post,
+    web::{self, service},
+    Error, HttpRequest, HttpResponse, Responder,
 };
 use std::{
     path::PathBuf,
@@ -10,15 +13,20 @@ use std::{
 
 const STREAM_SCOPE: &'static str = "/streams";
 
-pub fn stream_service_config(cfg: &mut web::ServiceConfig) {
+pub fn stream_service_config(
+    cfg: &mut web::ServiceConfig,
+    stream_store: web::Data<LocalStreamStore>,
+) {
     cfg.service(
         web::scope(STREAM_SCOPE)
+            .app_data(stream_store)
             .route(
                 "/",
                 web::method(http::Method::OPTIONS).to(preflight_response),
             )
             .route("/test", web::get().to(insert_video_stub))
-            .route("/all", web::get().to(get_all_streams)),
+            .route("/all", web::get().to(get_all_streams))
+            .service(get_segment),
     );
 }
 
@@ -63,46 +71,21 @@ async fn preflight_response() -> HttpResponse {
         .finish()
 }
 
-//        if request.method() == Method::OPTIONS {
-//            return Ok(self.preflight_response());
-//        }
-//
-//        let cursor = request.uri().path()[1..].find('/').unwrap() + 2;
-//        match &request.uri().path()[cursor..] {
-//            "test" if self.dev_mode => self.test().await,
-//            "all" => as_json_response(
-//                &self
-//                    .stream_store
-//                    .get_available_streams(&self.base_url)
-//                    .await,
-//            ),
-//            file => {
-//                let data = self.stream_store.get_segment(file).await.unwrap();
-//                let mut response = HttpResponse::Ok()
-//                    .append_header((header::CACHE_CONTROL, "no-cache"))
-//                    .append_header((header::ACCEPT_ENCODING, "identity"))
-//                    .append_header((header::ACCEPT_RANGES, "bytes"))
-//                    .append_header((header::ACCESS_CONTROL_ALLOW_HEADERS, "*"))
-//                    .header(
-//                        header::ACCESS_CONTROL_ALLOW_METHODS,
-//                        "POST, GET, OPTIONS",
-//                    )
-//                    .append_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
-//                    .append_header((header::ACCESS_CONTROL_MAX_AGE, "1728000"))
-//                    .header(
-//                        header::ACCESS_CONTROL_EXPOSE_HEADERS,
-//                        "Content-Length",
-//                    )
-//                    .append_header((header::CONTENT_LENGTH, data.len()));
-//
-//                if let Some(content_type) = lookup_content_type(file.as_ref()) {
-//                    response = response.append_header((header::CONTENT_TYPE, content_type));
-//                }
-//
-//                Ok(response.body(data.into()).unwrap())
-//            }
-//            _ => Ok(http::Response::builder()
-//                .status(http::StatusCode::NOT_FOUND)
-//                .body(Body::empty())
-//                .unwrap()),
-//        }
+#[get("/{segment_path}")]
+async fn get_segment(file: web::Path<String>, store: web::Data<LocalStreamStore>) -> HttpResponse {
+    let data = store.get_segment(file.into_inner()).await.unwrap();
+    HttpResponse::Ok()
+        .append_header((header::CACHE_CONTROL, "no-cache"))
+        .append_header((header::ACCEPT_ENCODING, "identity"))
+        .append_header((header::ACCEPT_RANGES, "bytes"))
+        .append_header((header::ACCESS_CONTROL_ALLOW_HEADERS, "*"))
+        .append_header((header::ACCESS_CONTROL_ALLOW_METHODS, "POST, GET, OPTIONS"))
+        .append_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
+        .append_header((header::ACCESS_CONTROL_MAX_AGE, "1728000"))
+        .append_header((header::ACCESS_CONTROL_EXPOSE_HEADERS, "Content-Length"))
+        .append_header((header::CONTENT_LENGTH, data.len()))
+        .body(data)
+    // if let Some(content_type) = lookup_content_type(file.as_ref()) {
+    //     response = response.append_header((header::CONTENT_TYPE, content_type));
+    // }
+}

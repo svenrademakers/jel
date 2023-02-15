@@ -1,7 +1,6 @@
 use actix_tls::connect::rustls::webpki_roots_cert_store;
 use actix_web::http::{self, Uri};
 use anyhow::{Context, Result};
-use bytes::Bytes;
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};

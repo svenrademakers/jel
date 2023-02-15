@@ -3,7 +3,6 @@ pub mod data_types;
 use self::data_types::*;
 use super::cache_map::CacheMap;
 use anyhow::{bail, ensure, Context, Result};
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, trace, warn};
 use notify::{Config, EventKind, PollWatcher, RecursiveMode, Watcher};
@@ -43,7 +42,7 @@ pub struct LocalStreamStore {
     stream_map: RwLock<BTreeMap<Uuid, Stream>>,
     uuid_lookup: RwLock<BTreeMap<PathBuf, Uuid>>,
     /// 3 way cache, caching streams optimized for the 3 different bitrate levels.
-    file_cache: RwLock<CacheMap<Path, Bytes, 128>>,
+    file_cache: RwLock<CacheMap<Path, Vec<u8>, 128>>,
     /// This watcher object is used to exit the watcher task.
     file_watcher: Option<PollWatcher>,
 }
@@ -288,7 +287,7 @@ impl LocalStreamStore {
         Ok(registration.uuid)
     }
 
-    pub async fn get_segment<P>(&self, file: P) -> Result<Bytes>
+    pub async fn get_segment<P>(&self, file: P) -> Result<Vec<u8>>
     where
         P: Hash + AsRef<Path>,
     {
@@ -299,7 +298,7 @@ impl LocalStreamStore {
         }
 
         Ok(cache
-            .insert(file.as_ref(), tokio::fs::read(path).await?.into())
+            .insert(file.as_ref(), tokio::fs::read(path).await?)
             .clone())
     }
 }

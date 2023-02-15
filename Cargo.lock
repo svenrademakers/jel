@@ -1443,7 +1443,6 @@ dependencies = [
  "async-trait",
  "awc",
  "base64",
- "bytes",
  "chrono",
  "clap",
  "daemonize",
