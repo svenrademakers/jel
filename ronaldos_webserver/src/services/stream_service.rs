@@ -4,8 +4,10 @@ use actix_web::{
     http::{self, header, StatusCode},
     post,
     web::{self, service},
-    Error, HttpRequest, HttpResponse, Responder,
+    Error, HttpRequest, HttpResponse, HttpResponseBuilder, Responder,
 };
+use log::info;
+use std::ffi::OsStr;
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
@@ -71,9 +73,17 @@ async fn preflight_response() -> HttpResponse {
         .finish()
 }
 
-#[get("/{segment_path}")]
+#[get("{file:.*}")]
 async fn get_segment(file: web::Path<String>, store: web::Data<LocalStreamStore>) -> HttpResponse {
-    let data = store.get_segment(file.into_inner()).await.unwrap();
+    let file = file.into_inner();
+    let data = store.get_segment(&file).await.unwrap();
+    let content_type = match lookup_content_type(&file) {
+        Some(content_type) => content_type,
+        None => {
+            return HttpResponse::NotImplemented().into();
+        }
+    };
+
     HttpResponse::Ok()
         .append_header((header::CACHE_CONTROL, "no-cache"))
         .append_header((header::ACCEPT_ENCODING, "identity"))
@@ -84,8 +94,15 @@ async fn get_segment(file: web::Path<String>, store: web::Data<LocalStreamStore>
         .append_header((header::ACCESS_CONTROL_MAX_AGE, "1728000"))
         .append_header((header::ACCESS_CONTROL_EXPOSE_HEADERS, "Content-Length"))
         .append_header((header::CONTENT_LENGTH, data.len()))
+        .append_header((header::CONTENT_TYPE, content_type))
         .body(data)
-    // if let Some(content_type) = lookup_content_type(file.as_ref()) {
-    //     response = response.append_header((header::CONTENT_TYPE, content_type));
-    // }
+}
+
+fn lookup_content_type<T: Into<PathBuf>>(path: T) -> Option<&'static str> {
+    match path.into().extension().and_then(OsStr::to_str) {
+        Some("m3u8") => Some("application/x-mpegURL"),
+        Some("mp4") => Some("video/mp4"),
+        Some("ts") => Some("video/mp2t"),
+        _ => None,
+    }
 }

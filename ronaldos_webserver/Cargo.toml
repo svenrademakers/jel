@@ -18,16 +18,13 @@ tokio = { version = "*", features = [
     "sync",
 ] }
 tokio-stream = { version = "*", features = ["fs"] }
-async-trait = "*"
 log = { version = "*", features = ["std"] }
 futures-util = "*"
 serde_json = "*"
 serde = { version = "*", features = ["derive"] }
-once_cell = "*"
 base64 = "*"
 serde_yaml = "*"
 chrono = { version = "*", features = ["serde"] }
-regex = "*"
 notify = "*"
 uuid = { version = "*", features = ["v4", "serde"] }
 anyhow = "*"
@@ -38,6 +35,7 @@ actix-tls = { version = "*", features = ["rustls"] }
 hyper_rusttls = { path = "../hyper_rusttls" }
 rustls = "*"
 awc = { version = "*", features = ["rustls"] }
+mime = "*"
 
 [target.'cfg(not(windows))'.dependencies]
 daemonize = "*"

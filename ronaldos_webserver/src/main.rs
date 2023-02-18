@@ -91,12 +91,12 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
             .app_data(cfg.clone())
             .app_data(football_api.clone())
             .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
+            .service(redirect_favicon)
             .service(
                 Files::new("/", cfg.www_dir())
                     .show_files_listing()
                     .index_file(index_file.to_string_lossy()),
             )
-            .service(redirect_favicon)
     });
 
     let tls_enabled = if tls_enabled { "enabled" } else { "disabled" };
