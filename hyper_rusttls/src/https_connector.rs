@@ -38,6 +38,12 @@ impl HttpsConnector {
     }
 }
 
+impl Default for HttpsConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Service<Uri> for HttpsConnector {
     type Response = TlsClientStream;
     type Error = Box<dyn std::error::Error + Send + Sync>;

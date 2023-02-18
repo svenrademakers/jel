@@ -67,12 +67,13 @@ async fn to_data_model(json: serde_json::Value) -> Result<BTreeMap<String, Vec<V
         .as_array()
         .with_context(|| format!("response: {}", json))?
     {
-        let score;
-        if fixt["goals"]["home"] == json!(null) || fixt["goals"]["away"] == json!(null) {
-            score = "".to_string();
+        let goals_empty =
+            fixt["goals"]["home"] == json!(null) || fixt["goals"]["away"] == json!(null);
+        let score = if goals_empty {
+            "".to_string()
         } else {
-            score = format!("{} - {}", fixt["goals"]["home"], fixt["goals"]["away"]);
-        }
+            format!("{} - {}", fixt["goals"]["home"], fixt["goals"]["away"])
+        };
 
         let match_entry = json! {{
             "home" : fixt["teams"]["home"]["name"],
