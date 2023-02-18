@@ -1,4 +1,3 @@
-mod handlers;
 mod logger;
 mod middleware;
 mod services;
@@ -20,9 +19,9 @@ use std::process::Command;
 
 use middleware::LocalStreamStore;
 
-use crate::handlers::redirect_service::{self, RedirectScheme};
 use crate::middleware::FootballApi;
 use crate::services::fixture_service::fixture_service_config;
+use crate::services::redirect_service::RedirectScheme;
 use crate::services::stream_service::stream_service_config;
 
 /// CLI structure that loads the commandline arguments. These arguments will be
