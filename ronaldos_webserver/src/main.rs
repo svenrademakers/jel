@@ -9,8 +9,6 @@ use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
 use hyper_rusttls::tls_config::load_server_config;
-//use handlers::authentication::RonaldoAuthentication;
-//use handlers::redirect_service::RedirectScheme;
 use log::info;
 use logger::init_log;
 use ronaldos_config::{get_application_config, Config};
@@ -24,6 +22,7 @@ use middleware::LocalStreamStore;
 
 use crate::handlers::redirect_service::{self, RedirectScheme};
 use crate::middleware::FootballApi;
+use crate::services::fixture_service::fixture_service_config;
 use crate::services::stream_service::stream_service_config;
 
 /// CLI structure that loads the commandline arguments. These arguments will be
@@ -89,13 +88,11 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
         App::new()
             .wrap(RedirectScheme::new(tls_enabled))
             .app_data(cfg.clone())
-            .app_data(football_api.clone())
             .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
+            .configure(|cfg| fixture_service_config(cfg, football_api.clone()))
             .service(redirect_favicon)
-            .service(
-                Files::new("/", cfg.www_dir())
-                    .show_files_listing()
-                    .index_file(index_file.to_string_lossy()),
+            .default_service(
+                Files::new("/", cfg.www_dir()).index_file(index_file.to_string_lossy()),
             )
     });
 
