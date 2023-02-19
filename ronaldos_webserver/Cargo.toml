@@ -1,6 +1,6 @@
 [package]
 name = "ronaldos-webserver"
-version = "1.1.0"
+version = "2.1.0"
 edition = "2021"
 authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
 description = "Rust https server including ronaldo's own specific http services"
@@ -32,6 +32,7 @@ actix-web = { version = "*", features = ["rustls"] }
 actix-files = "*"
 actix-service = "*"
 actix-tls = { version = "*", features = ["rustls"] }
+actix-limitation = "*"
 hyper_rusttls = { path = "../hyper_rusttls" }
 rustls = "*"
 awc = { version = "*", features = ["rustls"] }

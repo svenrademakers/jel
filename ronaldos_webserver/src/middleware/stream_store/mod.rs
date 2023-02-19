@@ -119,7 +119,7 @@ impl LocalStreamStore {
             EventKind::Remove(_) => self
                 .removed(&paths)
                 .await
-                .then(|| ())
+                .then_some(())
                 .context("nothing removed"),
             _ => Ok(()),
         };
@@ -135,7 +135,7 @@ impl LocalStreamStore {
         let mut lookup = Vec::new();
         let mut new_meta_files = Vec::new();
         for path in paths {
-            new_meta_files.extend(self.scan(&path).await?.map(|(p, meta)| {
+            new_meta_files.extend(self.scan(path).await?.map(|(p, meta)| {
                 lookup.push((p, meta.uuid));
                 (meta.uuid, meta.into())
             }));
@@ -222,7 +222,7 @@ impl LocalStreamStore {
                 None => continue,
             };
 
-            if let Some(_) = self.stream_map.write().await.remove(uuid) {
+            if self.stream_map.write().await.remove(uuid).is_some() {
                 debug!("removed {} {} from cache", file.to_string_lossy(), uuid);
                 removed_count += 1;
             }

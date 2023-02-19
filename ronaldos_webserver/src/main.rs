@@ -3,21 +3,19 @@ mod middleware;
 mod services;
 use actix_files::{Files, NamedFile};
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer};
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
 use hyper_rusttls::tls_config::load_server_config;
 use log::info;
 use logger::init_log;
+use middleware::LocalStreamStore;
 use ronaldos_config::{get_application_config, Config};
-
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
-
-use middleware::LocalStreamStore;
 
 use crate::middleware::FootballApi;
 use crate::services::fixture_service::fixture_service_config;
@@ -72,35 +70,50 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     //     true => None,
     // };
 
-    let addr_str = format!("{}:{}", config.host(), config.port());
-    let sock_address: SocketAddr = addr_str
-        .parse()
-        .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
     let tls_cfg = load_server_config(config.certificates(), config.private_key());
     let tls_enabled = tls_cfg.is_ok();
-    let cfg = config.clone();
 
-    let index_file = cfg.www_dir().join("index.html");
+    let index_file = config.www_dir().join("index.html");
     assert!(index_file.exists());
 
+    let cfg = config.clone();
     let mut server = HttpServer::new(move || {
         App::new()
             .wrap(RedirectScheme::new(tls_enabled))
-            .app_data(cfg.clone())
             .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
             .configure(|cfg| fixture_service_config(cfg, football_api.clone()))
+            .app_data(cfg.clone())
             .service(redirect_favicon)
             .default_service(
                 Files::new("/", cfg.www_dir()).index_file(index_file.to_string_lossy()),
             )
     });
 
-    let tls_enabled = if tls_enabled { "enabled" } else { "disabled" };
-    info!("starting server on {:?} tls={} ", sock_address, tls_enabled);
+    // if tls is configured, we will use port 80 to redirect people to the
+    // secure port
+    let port = match tls_enabled {
+        true => 80,
+        false => *config.port(),
+    };
+
+    let addr_str = format!("{}:{}", config.host(), port);
+    let sock_address: SocketAddr = addr_str
+        .parse()
+        .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
 
     if let Ok(cfg) = tls_cfg {
-        server = server.bind_rustls(sock_address, cfg)?;
+        ensure!(
+            config.port() != &80,
+            "port 80 is used to run redirect server"
+        );
+        let secure_address: SocketAddr = format!("{}:{}", config.host(), config.port())
+            .parse()
+            .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
+        info!("starting TLS server on {:?}", secure_address);
+        server = server.bind_rustls(secure_address, cfg)?;
     };
+
+    info!("starting server on {:?}", sock_address);
     server = server.bind(sock_address)?;
     server.run().await.context("runtime error")
 }

@@ -10,7 +10,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-const STREAM_SCOPE: &'static str = "/streams";
+const STREAM_SCOPE: &str = "/streams";
 
 pub fn stream_service_config(
     cfg: &mut web::ServiceConfig,
