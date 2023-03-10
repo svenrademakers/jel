@@ -1,7 +1,7 @@
 mod logger;
 mod middleware;
 mod services;
-use actix_files::{Files, NamedFile};
+use actix_files::Files;
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer};
 use anyhow::{ensure, Context};
 use clap::{Parser, ValueEnum};
@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use crate::middleware::FootballApi;
+use crate::services::authentication_service::RonaldoAuthentication;
 use crate::services::fixture_service::fixture_service_config;
 use crate::services::redirect_service::RedirectScheme;
 use crate::services::stream_service::stream_service_config;
@@ -65,10 +66,9 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     let football_api =
         web::Data::new(FootballApi::new("2022", "1853", config.api_key().clone()).await);
 
-    // let service_manager = match config.login().username.is_empty() {
-    //     false => Some(SessionMananger::new(config.login())),
-    //     true => None,
-    // };
+    let viewer_credentials_set = !config.login().username.is_empty();
+    //let session_manager: Option<web::Data<SessionMananger>> =
+    //    viewer_credentials_set.then(|| web::Data::new(SessionMananger::new(config.login())));
 
     let tls_cfg = load_server_config(config.certificates(), config.private_key());
     let tls_enabled = tls_cfg.is_ok();
@@ -79,11 +79,12 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     let cfg = config.clone();
     let mut server = HttpServer::new(move || {
         App::new()
+            .app_data(cfg.clone())
+            .app_data(RonaldoAuthentication)
             .wrap(RedirectScheme::new(tls_enabled))
             .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
             .configure(|cfg| fixture_service_config(cfg, football_api.clone()))
-            .app_data(cfg.clone())
-            .service(redirect_favicon)
+            .service(web::redirect("/favicon.ico", "/images/favicon.ico"))
             .default_service(
                 Files::new("/", cfg.www_dir()).index_file(index_file.to_string_lossy()),
             )
@@ -116,17 +117,6 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     info!("starting server on {:?}", sock_address);
     server = server.bind(sock_address)?;
     server.run().await.context("runtime error")
-}
-
-#[get("/favicon.ico")]
-async fn redirect_favicon(request: HttpRequest, cfg: web::Data<Config>) -> HttpResponse {
-    NamedFile::open_async(format!(
-        "{}/images/favicon.ico",
-        cfg.www_dir().to_string_lossy()
-    ))
-    .await
-    .unwrap()
-    .into_response(&request)
 }
 
 #[cfg(not(windows))]
