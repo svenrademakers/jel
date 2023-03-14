@@ -60,6 +60,7 @@
                 ./ronaldos_config
                 ./ronaldos_webserver
                 ./uacme_renew
+                ./scripts/export_www.sh
               ];
             };
             cargoLock = {
@@ -69,7 +70,7 @@
             outputs = [ "out" "www" ];
             installPhase = ''
               cp -r target $out
-              cp -r ronaldos_webserver/www $www
+              scripts/export_www.sh -o $www
             '';
           };
 

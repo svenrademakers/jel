@@ -1,6 +1,7 @@
 mod log;
 
 use ::log::{error, info};
+use anyhow::Result;
 use clap::Parser;
 use daemonize::{Daemonize, DaemonizeError};
 use ronaldos_config::get_webserver_pid;
@@ -23,7 +24,7 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    log::init()?;
+    log::init().unwrap();
     info!("lets go");
     let cli = Args::parse();
     let config = ronaldos_config::get_application_config(&cli.config);
@@ -56,13 +57,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn execute(script_path: &Path, host: &String, www: &Path) {
-    if let None =
-        get_webserver_pid().expect("this application must know the existence of a pid file")
+    if get_webserver_pid()
+        .expect("this application must know the existence of a pid file")
+        .is_none()
+        && !webserver_command(false)
     {
-        if !webserver_command(false) {
-            error!("ronaldos_webserver must be running");
-            return;
-        }
+        error!("ronaldos_webserver must be running");
+        return;
     }
 
     let challenge_path =

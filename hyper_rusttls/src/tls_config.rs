@@ -6,8 +6,8 @@ pub fn load_server_config(
     certificates: &Path,
     private_key: &Path,
 ) -> Result<rustls::ServerConfig, io::Error> {
-    let certs = load_certs(&certificates)?;
-    let key = load_private_key(&private_key)?;
+    let certs = load_certs(certificates)?;
+    let key = load_private_key(private_key)?;
     let mut cfg = rustls::ServerConfig::builder()
         .with_safe_defaults()
         .with_no_client_auth()
@@ -47,7 +47,7 @@ pub fn load_private_key(filename: &std::path::Path) -> io::Result<rustls::Privat
 
     let keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
         .map_err(|e| error(format!("failed to load private key {}", e)))?;
-    if keys.len() == 0 {
+    if keys.is_empty() {
         info!("falling back on rsa key reader");
         let rsa_keys = rustls_pemfile::rsa_private_keys(&mut reader)
             .map_err(|e| error(format!("failed to load private key {}", e)))?;

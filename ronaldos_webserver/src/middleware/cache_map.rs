@@ -130,7 +130,7 @@ where
 
     pub fn iter(&self) -> impl Iterator<Item = V> + '_ {
         CacheMapIterator {
-            cache: &self,
+            cache: self,
             node_info_index: self.first,
         }
     }

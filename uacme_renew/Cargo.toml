@@ -10,4 +10,4 @@ ronaldos_config = { path="../ronaldos_config" }
 clap = { version="*", features = ["derive"] }
 daemonize = "*"
 log = "*"
-
+anyhow = "*"

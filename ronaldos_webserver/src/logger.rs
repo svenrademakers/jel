@@ -12,9 +12,8 @@ const MAX_LOG_LEVEL: LevelFilter = LevelFilter::Trace;
 
 /// setup logging component. logs to terminal in debug mode. otherwise to syslog
 pub fn init_log(log_level: Level) {
-    let box_logger_result;
     //  if cfg!(debug_assertions) {
-    box_logger_result = log::set_boxed_logger(Box::new(TerminalLogger::new(log_level)));
+    let box_logger_result = log::set_boxed_logger(Box::new(TerminalLogger::new(log_level)));
     // } else {
     //     let formatter = Formatter3164 {
     //         facility: Facility::LOG_USER,
@@ -94,6 +93,6 @@ fn extract_component_name(filename: Option<&str>) -> OsString {
             .map(ToOwned::to_owned)
             .unwrap_or_default(),
         Some(name) => name.into(),
-        None => return "".into(),
+        None => "".into(),
     }
 }

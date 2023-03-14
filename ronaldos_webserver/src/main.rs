@@ -1,23 +1,27 @@
 mod logger;
 mod middleware;
-mod root_service;
 mod services;
-
-use crate::middleware::{FootballApi, LocalStreamStore};
-use crate::services::{FileService, FixtureService, SessionMananger, StreamsService};
+use actix_files::Files;
+use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer};
+use anyhow::{ensure, Context};
 use clap::{Parser, ValueEnum};
 #[cfg(not(windows))]
 use daemonize::Daemonize;
-use hyper_rusttls::run_server;
 use hyper_rusttls::tls_config::load_server_config;
-use log::*;
+use log::info;
 use logger::init_log;
+use middleware::LocalStreamStore;
 use ronaldos_config::{get_application_config, Config};
-use root_service::RootService;
-use std::io::{self, Error, ErrorKind};
+use std::io::ErrorKind;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
+
+use crate::middleware::FootballApi;
+use crate::services::authentication_service::RonaldoAuthentication;
+use crate::services::fixture_service::fixture_service_config;
+use crate::services::redirect_service::RedirectScheme;
+use crate::services::stream_service::stream_service_config;
 
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
@@ -37,7 +41,7 @@ pub enum DeamonAction {
     RESTART,
 }
 
-fn main() -> io::Result<()> {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let config = get_application_config(&cli.config);
     let log_level = match config.verbose() {
@@ -48,49 +52,71 @@ fn main() -> io::Result<()> {
 
     #[cfg(not(windows))]
     if let Some(option) = cli.daemon {
-        daemonize(option).ok_or(Error::new(ErrorKind::Other, "fatal"))?;
+        daemonize(option).ok_or(std::io::Error::new(ErrorKind::Other, "fatal"))?;
     }
 
     let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async move { application_main(config).await })
+    rt.block_on(async move { application_main(web::Data::new(config)).await })
 }
 
-async fn application_main(config: Config) -> Result<(), Error> {
+async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
     LocalStreamStore::run(&mut recordings_disk);
+    let stream_store = web::Data::from(recordings_disk);
+    let football_api =
+        web::Data::new(FootballApi::new("2022", "1853", config.api_key().clone()).await);
 
-    let football_api = FootballApi::new("2022", "1853", config.api_key().clone()).await;
+    let viewer_credentials_set = !config.login().username.is_empty();
+    //let session_manager: Option<web::Data<SessionMananger>> =
+    //    viewer_credentials_set.then(|| web::Data::new(SessionMananger::new(config.login())));
 
-    let service_manager = match config.login().username.is_empty() {
-        false => Some(SessionMananger::new(config.login())),
-        true => None,
+    let tls_cfg = load_server_config(config.certificates(), config.private_key());
+    let tls_enabled = tls_cfg.is_ok();
+
+    let index_file = config.www_dir().join("index.html");
+    assert!(index_file.exists());
+
+    let cfg = config.clone();
+    let mut server = HttpServer::new(move || {
+        App::new()
+            .app_data(cfg.clone())
+            .app_data(RonaldoAuthentication)
+            .wrap(RedirectScheme::new(tls_enabled))
+            .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
+            .configure(|cfg| fixture_service_config(cfg, football_api.clone()))
+            .service(web::redirect("/favicon.ico", "/images/favicon.ico"))
+            .default_service(
+                Files::new("/", cfg.www_dir()).index_file(index_file.to_string_lossy()),
+            )
+    });
+
+    // if tls is configured, we will use port 80 to redirect people to the
+    // secure port
+    let port = match tls_enabled {
+        true => 80,
+        false => *config.port(),
     };
 
-    let address = format!("{}:{}", config.host(), config.port())
+    let addr_str = format!("{}:{}", config.host(), port);
+    let sock_address: SocketAddr = addr_str
         .parse()
-        .unwrap();
-    let host = format!("https://{}", config.hostname());
-    let mut service_context = RootService::new(config.www_dir(), service_manager).await?;
-    service_context.append_service(FixtureService::new(football_api, recordings_disk.clone()));
-    service_context.append_service(FileService::new(config.www_dir()).await?);
-    service_context.append_service(StreamsService::new(
-        recordings_disk,
-        host,
-        *config.verbose(),
-    ));
-    let tls_cfg = load_server_config(config.certificates(), config.private_key());
+        .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
 
-    if let Err(e) = run_server(
-        Arc::new(service_context),
-        address,
-        config.hostname(),
-        tls_cfg.ok(),
-    )
-    .await
-    {
-        error!("error running server: {}", e);
-    }
-    Ok(())
+    if let Ok(cfg) = tls_cfg {
+        ensure!(
+            config.port() != &80,
+            "port 80 is used to run redirect server"
+        );
+        let secure_address: SocketAddr = format!("{}:{}", config.host(), config.port())
+            .parse()
+            .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
+        info!("starting TLS server on {:?}", secure_address);
+        server = server.bind_rustls(secure_address, cfg)?;
+    };
+
+    info!("starting server on {:?}", sock_address);
+    server = server.bind(sock_address)?;
+    server.run().await.context("runtime error")
 }
 
 #[cfg(not(windows))]
