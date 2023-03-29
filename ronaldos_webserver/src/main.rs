@@ -16,8 +16,9 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
 
-use crate::middleware::FootballApi;
+use crate::middleware::{FootballApi, SessionMananger};
 use crate::services::authentication_service::RonaldoAuthentication;
 use crate::services::fixture_service::fixture_service_config;
 use crate::services::redirect_service::RedirectScheme;
@@ -67,8 +68,7 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
         web::Data::new(FootballApi::new("2022", "1853", config.api_key().clone()).await);
 
     let viewer_credentials_set = !config.login().username.is_empty();
-    //let session_manager: Option<web::Data<SessionMananger>> =
-    //    viewer_credentials_set.then(|| web::Data::new(SessionMananger::new(config.login())));
+    let session_mananger = viewer_credentials_set.then(|| SessionMananger::new(config.login()));
 
     let tls_cfg = load_server_config(config.certificates(), config.private_key());
     let tls_enabled = tls_cfg.is_ok();
@@ -80,7 +80,7 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     let mut server = HttpServer::new(move || {
         App::new()
             .app_data(cfg.clone())
-            .app_data(RonaldoAuthentication)
+            .wrap(RonaldoAuthentication::new(session_mananger.clone()))
             .wrap(RedirectScheme::new(tls_enabled))
             .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
             .configure(|cfg| fixture_service_config(cfg, football_api.clone()))

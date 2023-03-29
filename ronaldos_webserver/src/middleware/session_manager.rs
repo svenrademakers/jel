@@ -1,3 +1,4 @@
+use actix_web::{http, HttpRequest, HttpResponse};
 use base64::engine::general_purpose::URL_SAFE;
 use base64::Engine;
 use log::debug;
@@ -7,10 +8,17 @@ use std::time::Duration;
 use std::{fmt::Display, ops::Add};
 const SESSION_ID_KEY: &str = "Session_id";
 
-#[derive(Deserialize)]
-pub enum Users {
-    Admin,
-    Viewer(u32),
+#[derive(Debug, PartialEq)]
+pub enum PermissionResult {
+    Denied,
+    AuthenticationNeeded,
+    Ok,
+}
+fn allow_list(path: &str) -> bool {
+    path == "/favicon.ico"
+        || path == "/login.html"
+        || path == "/dologin"
+        || path.to_string().starts_with("/.well-known")
 }
 
 #[derive(Debug, Clone)]
@@ -18,90 +26,78 @@ pub struct SessionMananger {
     encoded: String,
 }
 
-//impl SessionMananger {
-//    pub fn new(login: &Login) -> Self {
-//        let session_id: String = format!("username={}&password={}", login.username, login.password);
-//        debug!("raw session id: {}", session_id);
-//        let mut encoded = String::new();
-//        URL_SAFE.encode_string(session_id, &mut encoded);
-//        debug!("session cookie: {}", encoded);
-//        SessionMananger { encoded }
-//    }
-//}
-//    /// This function checks if an request is allowed to be handled by checking
-//    /// if the cookie of the request contains the correct username and password.
-//    /// login requests are always allowed
-//    ///
-//    /// # Return
-//    /// * None if request is allowed
-//    /// * Some(response) containing a response why the request is not allowed
-//    pub async fn has_permission(
-//        &self,
-//        request: &http::Request<Body>,
-//    ) -> Result<Option<http::HeaderMap>, http::Response<Body>> {
-//        if request.uri().path() == "/login.html"
-//            || request.uri().path() == "/dologin"
-//            || request.uri().path().to_string().starts_with("/.well-known")
-//        {
-//            return Ok(None);
-//        }
-//
-//        if let Some(query) = request.uri().query() {
-//            debug!("has query {}", query);
-//
-//            match self.create_session(query.trim().as_bytes()) {
-//                Some(session) => {
-//                    return Ok(Some(cookie_header(session)));
-//                }
-//                None => {
-//                    debug!("query no good");
-//                    return Err(denied_response(request.uri()));
-//                }
-//            }
-//        }
-//
-//        let valid_session = request
-//            .headers()
-//            .get("Cookie")
-//            .map(http::HeaderValue::to_str)
-//            .map(Result::ok)
-//            .flatten()
-//            .map(|c| self.cookie_contains_valid_session(c))
-//            .unwrap_or_default();
-//
-//        match valid_session {
-//            true => Ok(None),
-//            false => Err(denied_response(request.uri())),
-//        }
-//    }
-//
-//    fn create_session(&self, data: &[u8]) -> Option<String> {
-//        let utf8_body = std::str::from_utf8(data).unwrap();
-//        let encoded = URL_SAFE.encode(utf8_body);
-//        debug!("encoded session: {}", encoded);
-//        if encoded == self.encoded {
-//            return Some(encoded);
-//        }
-//        None
-//    }
-//}
-//
-//fn cookie_header(session: String) -> HeaderMap {
-//    let expiration = chrono::Local::now().add(Duration::days(31));
-//    let mut map: HeaderMap = HeaderMap::new();
-//    map.append(
-//        http::header::EXPIRES,
-//        expiration.to_rfc2822().parse().unwrap(),
-//    );
-//    map.append(
-//        http::header::SET_COOKIE,
-//        format!("{}={}; Secure; HttpOnly", SESSION_ID_KEY, session)
-//            .parse()
-//            .unwrap(),
-//    );
-//    map
-//}
-//
+impl SessionMananger {
+    pub fn new(login: &Login) -> Self {
+        let session_id: String = format!("username={}&password={}", login.username, login.password);
+        debug!("raw session id: {}", session_id);
+        let mut encoded = String::new();
+        URL_SAFE.encode_string(session_id, &mut encoded);
+        debug!("session cookie: {}", encoded);
+        SessionMananger { encoded }
+    }
+
+    /// This function checks if an request is allowed to be handled by checking
+    /// if the cookie of the request contains the correct username and password.
+    /// login requests are always allowed
+    ///
+    /// # Return
+    /// * None if request is allowed
+    /// * Some(response) containing a response why the request is not allowed
+    pub fn has_permission(&self, request: &HttpRequest) -> PermissionResult {
+        if allow_list(request.path()) {
+            return PermissionResult::Ok;
+        }
+
+        let result = request
+            .headers()
+            .get("Cookie")
+            .map(http::header::HeaderValue::to_str)
+            .map(Result::ok)
+            .flatten()
+            .map(|str| {
+                let mut s = String::new();
+                URL_SAFE.encode_string(str, &mut s);
+                if s == self.encoded {
+                    PermissionResult::Ok
+                } else {
+                    PermissionResult::AuthenticationNeeded
+                }
+            })
+            .unwrap_or(PermissionResult::Denied);
+
+        if result == PermissionResult::Denied && request.path() == "/" {
+            return PermissionResult::AuthenticationNeeded;
+        }
+        result
+    }
+
+    fn create_session(&self, data: &[u8]) -> Option<String> {
+        let utf8_body = std::str::from_utf8(data).unwrap();
+        let encoded = URL_SAFE.encode(utf8_body);
+        debug!("encoded session: {}", encoded);
+        if encoded == self.encoded {
+            return Some(encoded);
+        }
+        None
+    }
+}
+
+fn cookie_header(session: String) -> http::header::HeaderMap {
+    let expiration = chrono::Local::now().add(chrono::Duration::days(31));
+    let mut map = http::header::HeaderMap::new();
+    map.append(
+        http::header::EXPIRES,
+        expiration.to_rfc2822().parse().unwrap(),
+    );
+    map.append(
+        http::header::SET_COOKIE,
+        format!("{}={}; Secure; HttpOnly", SESSION_ID_KEY, session)
+            .parse()
+            .unwrap(),
+    );
+    map
+}
+
 //fn denied_response(uri: &http::Uri) -> http::Response<Body> {
 //    match uri.path().ends_with("html") || uri.path().eq("/") {
 //        true => http::Response::builder()

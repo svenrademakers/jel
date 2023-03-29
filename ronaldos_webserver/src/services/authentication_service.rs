@@ -3,14 +3,25 @@ use actix_service::{Service, Transform};
 use actix_web::{
     body::EitherBody,
     dev::{ServiceRequest, ServiceResponse},
-    Error, HttpResponse,
+    http, Error, HttpResponse,
 };
 use futures_util::future::LocalBoxFuture;
-use std::future::{self, ready, Ready};
+use std::{
+    future::{self, ready, Ready},
+    sync::Arc,
+};
 
-#[derive(Debug, Clone, Default)]
-pub struct RonaldoAuthentication;
+use crate::middleware::{PermissionResult, SessionMananger};
 
+pub struct RonaldoAuthentication {
+    session_mananger: Option<SessionMananger>,
+}
+
+impl RonaldoAuthentication {
+    pub fn new(session_mananger: Option<SessionMananger>) -> Self {
+        Self { session_mananger }
+    }
+}
 impl<S, B> Transform<S, ServiceRequest> for RonaldoAuthentication
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
@@ -24,13 +35,17 @@ where
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(AuthenticationService { service }))
+        ready(Ok(AuthenticationService {
+            service,
+            session_mananger: self.session_mananger.clone(),
+        }))
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct AuthenticationService<S> {
     service: S,
+    session_mananger: Option<SessionMananger>,
 }
 
 impl<S, B> Service<ServiceRequest> for AuthenticationService<S>
@@ -46,26 +61,44 @@ where
     actix_service::forward_ready!(service);
 
     fn call(&self, request: ServiceRequest) -> Self::Future {
-        if !allow_list(request.uri().path()) {
-            return Box::pin(future::ready(
-                Ok(ServiceResponse::new(
-                    request.request().clone(),
-                    HttpResponse::Unauthorized().finish(),
-                ))
-                .map(ServiceResponse::map_into_right_body),
-            ));
-        }
-        let res = self.service.call(request);
-        Box::pin(async move {
-            // forwarded responses map to "left" body
-            res.await.map(ServiceResponse::map_into_left_body)
-        })
-    }
-}
+        // if no session manager is defined, just pass through the request
+        let Some(ref authenticator) = self.session_mananger else {
+                let res = self.service.call(request);
+                return Box::pin(async move {
+                    // forwarded responses map to "left" body
+                    res.await.map(ServiceResponse::map_into_left_body)
+                })
+        };
 
-fn allow_list(path: &str) -> bool {
-    path == "/favicon.ico"
-        || path == "/login.html"
-        || path == "/dologin"
-        || path.to_string().starts_with("/.well-known")
+        match authenticator.has_permission(request.request()) {
+            crate::middleware::PermissionResult::Ok => {
+                let res = self.service.call(request);
+                Box::pin(async move {
+                    // forwarded responses map to "left" body
+                    res.await.map(ServiceResponse::map_into_left_body)
+                })
+            }
+            PermissionResult::AuthenticationNeeded => {
+                return Box::pin(future::ready(
+                    Ok(ServiceResponse::new(
+                        request.request().clone(),
+                        HttpResponse::TemporaryRedirect()
+                            .insert_header((http::header::LOCATION, "/login.html"))
+                            .finish(),
+                    ))
+                    .map(ServiceResponse::map_into_right_body),
+                ))
+            }
+            PermissionResult::Denied => {
+                return Box::pin(future::ready(
+                    Ok(ServiceResponse::new(
+                        request.request().clone(),
+                        HttpResponse::Forbidden().finish(),
+                    ))
+                    .map(ServiceResponse::map_into_right_body),
+                ))
+            }
+            PermissionResult::Ok => todo!(),
+        }
+    }
 }

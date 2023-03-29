@@ -1,9 +1,9 @@
 mod log;
 
 use ::log::{error, info};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
-use daemonize::{Daemonize, DaemonizeError};
+use daemonize::Daemonize;
 use ronaldos_config::get_webserver_pid;
 use std::{
     error::Error,
@@ -91,7 +91,7 @@ fn execute(script_path: &Path, host: &String, www: &Path) {
     }
 }
 
-fn daemonize() -> Result<(), DaemonizeError> {
+fn daemonize() -> Result<()> {
     const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
     const PID: &str = "/opt/var/run/ronaldo_uacme.pid";
 
@@ -103,6 +103,7 @@ fn daemonize() -> Result<(), DaemonizeError> {
         .stdout(stdout)
         .stderr(stderr)
         .start()
+        .context("daemon error")
 }
 
 fn webserver_command(restart: bool) -> bool {
