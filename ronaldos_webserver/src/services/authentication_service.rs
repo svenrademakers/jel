@@ -1,4 +1,3 @@
-use actix_limitation::Status;
 use actix_service::{Service, Transform};
 use actix_web::{
     body::EitherBody,
@@ -6,10 +5,7 @@ use actix_web::{
     http, Error, HttpResponse,
 };
 use futures_util::future::LocalBoxFuture;
-use std::{
-    future::{self, ready, Ready},
-    sync::Arc,
-};
+use std::future::{self, ready, Ready};
 
 use crate::middleware::{PermissionResult, SessionMananger};
 

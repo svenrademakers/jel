@@ -1,28 +1,26 @@
 mod logger;
 mod middleware;
 mod services;
-use actix_files::Files;
-use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer};
-use anyhow::{ensure, Context};
-use clap::{Parser, ValueEnum};
-#[cfg(not(windows))]
-use daemonize::Daemonize;
-use hyper_rusttls::tls_config::load_server_config;
-use log::info;
-use logger::init_log;
-use middleware::LocalStreamStore;
-use ronaldos_config::{get_application_config, Config};
-use std::io::ErrorKind;
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::process::Command;
-use std::sync::Arc;
+mod tls_config;
 
 use crate::middleware::{FootballApi, SessionMananger};
 use crate::services::authentication_service::RonaldoAuthentication;
 use crate::services::fixture_service::fixture_service_config;
 use crate::services::redirect_service::RedirectScheme;
 use crate::services::stream_service::stream_service_config;
+use crate::tls_config::load_server_config;
+use actix_files::Files;
+use actix_web::{web, App, HttpServer};
+use anyhow::{ensure, Context};
+use clap::Parser;
+use log::info;
+use logger::init_log;
+use middleware::LocalStreamStore;
+use ronaldos_config::{get_application_config, Config};
+use rustls::RootCertStore;
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
@@ -31,15 +29,6 @@ use crate::services::stream_service::stream_service_config;
 pub struct Cli {
     #[clap(short, long, default_value = ronaldos_config::CFG_PATH )]
     pub config: PathBuf,
-    #[clap(short, value_enum)]
-    pub daemon: Option<DeamonAction>,
-}
-
-#[derive(ValueEnum, Clone, Debug)]
-pub enum DeamonAction {
-    START,
-    STOP,
-    RESTART,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -51,21 +40,18 @@ fn main() -> anyhow::Result<()> {
     };
     init_log(log_level);
 
-    #[cfg(not(windows))]
-    if let Some(option) = cli.daemon {
-        daemonize(option).ok_or(std::io::Error::new(ErrorKind::Other, "fatal"))?;
-    }
-
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move { application_main(web::Data::new(config)).await })
 }
 
 async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
+    let cert_store = Arc::new(native_cert_store());
     let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
     LocalStreamStore::run(&mut recordings_disk);
     let stream_store = web::Data::from(recordings_disk);
-    let football_api =
-        web::Data::new(FootballApi::new("2022", "1853", config.api_key().clone()).await);
+    let football_api = web::Data::new(
+        FootballApi::new("2022", "1853", config.api_key().clone(), cert_store).await,
+    );
 
     let viewer_credentials_set = !config.login().username.is_empty();
     let session_mananger = viewer_credentials_set.then(|| SessionMananger::new(config.login()));
@@ -111,7 +97,7 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
             .parse()
             .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
         info!("starting TLS server on {:?}", secure_address);
-        server = server.bind_rustls(secure_address, cfg)?;
+        server = server.bind_rustls_021(secure_address, cfg)?;
     };
 
     info!("starting server on {:?}", sock_address);
@@ -119,36 +105,10 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     server.run().await.context("runtime error")
 }
 
-#[cfg(not(windows))]
-fn daemonize(option: DeamonAction) -> Option<()> {
-    const STDOUT: &str = concat!("/opt/var/", env!("CARGO_PKG_NAME"));
-    std::fs::create_dir_all(STDOUT).unwrap();
-
-    //let stdout = std::fs::File::create(format!("{}/daemon.out", STDOUT)).unwrap();
-    let stderr = std::fs::File::create(format!("{}/daemon.err", STDOUT)).unwrap();
-
-    match option {
-        DeamonAction::START => Daemonize::new()
-            .pid_file(ronaldos_config::PID)
-            .chown_pid_file(true)
-            .group("root")
-            .user("admin")
-            // .stdout(stdout)
-            .stderr(stderr)
-            .start()
-            .ok(),
-        DeamonAction::STOP => {
-            let pid = std::fs::read(ronaldos_config::PID).ok()?;
-            Command::new("/bin/bash")
-                .arg("kill")
-                .arg(std::str::from_utf8(&pid).ok()?)
-                .output()
-                .ok()?;
-            None
-        }
-        DeamonAction::RESTART => {
-            let _ = daemonize(DeamonAction::STOP);
-            daemonize(DeamonAction::START)
-        }
+fn native_cert_store() -> RootCertStore {
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
+        roots.add(&rustls::Certificate(cert.0)).unwrap();
     }
+    roots
 }

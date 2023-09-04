@@ -36,7 +36,7 @@
             src = fetchgit {
               url =
                 "https://git.yoctoproject.org/opkg-utils";
-              sha256 = "kO4mUJKE6vtiOIvCiMcYo+5UuoL8AzpmT1hluHrlafg=";
+              sha256 = "QMqqlJ9vnqbRzELgKbGUC7K2kA8/AuZcIjpTSOlyNrY=";
             };
             makeFlags = [
               "DESTDIR=${placeholder "out"}"

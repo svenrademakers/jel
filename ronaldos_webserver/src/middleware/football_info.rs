@@ -1,8 +1,9 @@
-use actix_tls::connect::rustls::webpki_roots_cert_store;
 use actix_web::http::{self, Uri};
 use anyhow::{Context, Result};
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use log::{debug, info};
+use rustls::ClientConfig;
+use rustls::RootCertStore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, io::Write, str::FromStr, sync::Arc};
@@ -24,10 +25,16 @@ pub struct FootballApi {
     cache: RwLock<BTreeMap<String, Vec<Value>>>,
     url: http::uri::Uri,
     api_key: String,
+    cert_store: Arc<RootCertStore>,
 }
 
 impl FootballApi {
-    pub async fn new(season: &str, team: &str, api_key: String) -> Self {
+    pub async fn new(
+        season: &str,
+        team: &str,
+        api_key: String,
+        cert_store: Arc<RootCertStore>,
+    ) -> Self {
         let api_uri = http::Uri::from_str(&format!(
             "https://api-football-v1.p.rapidapi.com/v3/fixtures?season={}&team={}",
             season, team
@@ -38,6 +45,7 @@ impl FootballApi {
             cache: RwLock::new(BTreeMap::new()),
             url: api_uri,
             api_key,
+            cert_store,
         }
     }
 
@@ -50,7 +58,7 @@ impl FootballApi {
                 return Ok(());
             }
             debug!("cache not loaded yet, sending football request");
-            let raw = football_api_request(&self.url, &self.api_key).await?;
+            let raw = self.football_api_request().await?;
             let mut map = to_data_model(raw).await?;
             write_cache.append(&mut map);
         }
@@ -58,6 +66,25 @@ impl FootballApi {
         let str = serde_json::to_string(&*write_cache)?;
         writer.write_all(str.as_bytes())?;
         Ok(())
+    }
+
+    async fn football_api_request(&self) -> anyhow::Result<serde_json::Value> {
+        debug!("downloading match data from football-api");
+        let config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(self.cert_store.clone())
+            .with_no_client_auth();
+        let client = awc::Client::builder()
+            .connector(awc::Connector::new().rustls_021(Arc::new(config)))
+            .finish();
+        let request = client
+            .get(&self.url)
+            .insert_header(("X-RapidAPI-Host", "api-football-v2.p.rapidapi.com"))
+            .insert_header(("X-RapidAPI-Key", self.api_key.as_str()));
+        let mut res = request.send().await.unwrap();
+        res.json::<serde_json::Value>()
+            .await
+            .context("not a valid json reponse body")
     }
 }
 
@@ -97,21 +124,10 @@ async fn to_data_model(json: serde_json::Value) -> Result<BTreeMap<String, Vec<V
     Ok(fixtures)
 }
 
-async fn football_api_request(url: &Uri, api_key: &str) -> anyhow::Result<serde_json::Value> {
-    debug!("downloading match data from football-api");
-    let config = rustls::client::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(webpki_roots_cert_store())
-        .with_no_client_auth();
-    let client = awc::Client::builder()
-        .connector(awc::Connector::new().rustls(Arc::new(config)))
-        .finish();
-    let request = client
-        .get(url)
-        .insert_header(("X-RapidAPI-Host", "api-football-v2.p.rapidapi.com"))
-        .insert_header(("X-RapidAPI-Key", api_key));
-    let mut res = request.send().await.unwrap();
-    res.json::<serde_json::Value>()
-        .await
-        .context("not a valid json reponse body")
+fn native_cert_store() -> RootCertStore {
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
+        roots.add(&rustls::Certificate(cert.0)).unwrap();
+    }
+    roots
 }

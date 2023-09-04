@@ -1,6 +1,5 @@
 use log::info;
 use std::{fs, io, path::Path};
-use tokio_rustls::rustls;
 
 pub fn load_server_config(
     certificates: &Path,
