@@ -97,7 +97,7 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
             .parse()
             .with_context(|| format!("could not parse {} to socket sock_address", addr_str))?;
         info!("starting TLS server on {:?}", secure_address);
-        server = server.bind_rustls_021(secure_address, cfg)?;
+        server = server.bind_rustls_0_23(secure_address, cfg)?;
     };
 
     info!("starting server on {:?}", sock_address);
@@ -108,7 +108,7 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
 fn native_cert_store() -> RootCertStore {
     let mut roots = rustls::RootCertStore::empty();
     for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
-        roots.add(&rustls::Certificate(cert.0)).unwrap();
+        roots.add(cert).unwrap();
     }
     roots
 }

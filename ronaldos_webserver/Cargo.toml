@@ -6,9 +6,9 @@ authors = ["Sven Rademakers <sven.rademakers@gmail.com>"]
 description = "Rust https server including ronaldo's own specific http services"
 
 [dependencies]
-clap = { version = "4.4.2", features = ["derive"] }
+clap = { version = "4.5.15", features = ["derive"] }
 ronaldos_config = { path = "../ronaldos_config" }
-tokio = { version = "1.32.0", features = [
+tokio = { version = "1.39.2", features = [
     "net",
     "fs",
     "rt",
@@ -17,24 +17,24 @@ tokio = { version = "1.32.0", features = [
     "io-util",
     "sync",
 ] }
-tokio-stream = { version = "0.1.14", features = ["fs"] }
-log = { version = "0.4.20", features = ["std"] }
-futures-util = "0.3.28"
-serde_json = "1.0.105"
-serde = { version = "1.0.188", features = ["derive"] }
-base64 = "0.21.3"
-serde_yaml = "0.9.25"
-chrono = { version = "0.4.28", features = ["serde"] }
+tokio-stream = { version = "0.1.15", features = ["fs"] }
+log = { version = "0.4.22", features = ["std"] }
+futures-util = "0.3.30"
+serde_json = "1.0.124"
+serde = { version = "1.0.206", features = ["derive"] }
+base64 = "0.22.1"
+serde_yaml = "0.9.34"
+chrono = { version = "0.4.38", features = ["serde"] }
 notify = "6.1.1"
-uuid = { version = "1.4.1", features = ["v4", "serde"] }
-anyhow = "1.0.75"
-actix-web = { version = "4.4.0", features = ["rustls-0_21"] }
-awc = { version = "*", features = ["rustls-0_21"] }
-rustls-native-certs = "0.6.3"
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
+anyhow = "1.0.86"
+actix-web = { version = "4.9.0", features = ["rustls-0_23"] }
+awc = { version = "3.5.1", features = ["rustls-0_23"] }
+rustls-native-certs = "0.7.1"
 actix-service = "2.0.2"
-rustls = "0.21.7"
-actix-files = "0.6.2"
-rustls-pemfile = "1.0.3"
+actix-files = "0.6.6"
+rustls-pemfile = "2.1.3"
+rustls = "0.23.12"
 
 [dev-dependencies]
 tempdir = "*"

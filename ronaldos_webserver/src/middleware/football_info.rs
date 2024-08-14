@@ -71,11 +71,10 @@ impl FootballApi {
     async fn football_api_request(&self) -> anyhow::Result<serde_json::Value> {
         debug!("downloading match data from football-api");
         let config = ClientConfig::builder()
-            .with_safe_defaults()
             .with_root_certificates(self.cert_store.clone())
             .with_no_client_auth();
         let client = awc::Client::builder()
-            .connector(awc::Connector::new().rustls_021(Arc::new(config)))
+            .connector(awc::Connector::new().rustls_0_23(Arc::new(config)))
             .finish();
         let request = client
             .get(&self.url)
@@ -122,12 +121,4 @@ async fn to_data_model(json: serde_json::Value) -> Result<BTreeMap<String, Vec<V
             .push(match_entry);
     }
     Ok(fixtures)
-}
-
-fn native_cert_store() -> RootCertStore {
-    let mut roots = rustls::RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
-        roots.add(&rustls::Certificate(cert.0)).unwrap();
-    }
-    roots
 }
