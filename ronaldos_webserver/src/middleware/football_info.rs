@@ -1,4 +1,4 @@
-use actix_web::http::{self, Uri};
+use actix_web::http::{self};
 use anyhow::{Context, Result};
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use log::{debug, info};
@@ -36,7 +36,7 @@ impl FootballApi {
         cert_store: Arc<RootCertStore>,
     ) -> Self {
         let api_uri = http::Uri::from_str(&format!(
-            "https://api-football-v1.p.rapidapi.com/v3/fixtures?season={}&team={}",
+            "https://v3.football.api-sports.io/fixtures?season={}&team={}",
             season, team
         ))
         .unwrap();
@@ -104,7 +104,7 @@ async fn to_data_model(json: serde_json::Value) -> Result<BTreeMap<String, Vec<V
         let match_entry = json! {{
             "home" : fixt["teams"]["home"]["name"],
             "away" : fixt["teams"]["away"]["name"],
-            "venue" : fixt["teams"]["away"]["name"],
+            "venue" : fixt["fixture"]["venue"]["name"],
             "score" : score,
             "timestamp" : fixt["fixture"]["timestamp"],
             "fixture_id" : fixt["fixture"]["id"],

@@ -50,7 +50,7 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
     LocalStreamStore::run(&mut recordings_disk);
     let stream_store = web::Data::from(recordings_disk);
     let football_api = web::Data::new(
-        FootballApi::new("2022", "1853", config.api_key().clone(), cert_store).await,
+        FootballApi::new("2024", "1857", config.api_key().clone(), cert_store).await,
     );
 
     let viewer_credentials_set = !config.login().username.is_empty();
@@ -70,7 +70,6 @@ async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
             .wrap(RedirectScheme::new(tls_enabled))
             .configure(|cfg| stream_service_config(cfg, stream_store.clone()))
             .configure(|cfg| fixture_service_config(cfg, football_api.clone()))
-            .service(web::redirect("/favicon.ico", "/images/favicon.ico"))
             .default_service(
                 Files::new("/", cfg.www_dir()).index_file(index_file.to_string_lossy()),
             )

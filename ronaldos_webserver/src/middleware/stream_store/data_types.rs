@@ -1,6 +1,7 @@
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsStr, path::PathBuf};
+use thiserror::Error;
 use uuid::Uuid;
 
 pub type MetaFile = StreamMeta<PathBuf>;
@@ -50,9 +51,12 @@ pub struct Source {
     pub typ: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RegisterError {
+    #[error("no source url specified")]
     SourceArgumentEmpty,
-    ParseError(serde_yaml::Error),
-    IoError(std::io::Error),
+    #[error(transparent)]
+    ParseError(#[from] serde_yaml::Error),
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
 }
