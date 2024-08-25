@@ -1,11 +1,10 @@
-use actix_web::{http, HttpRequest, HttpResponse};
+use actix_web::{http, HttpRequest};
 use base64::engine::general_purpose::URL_SAFE;
 use base64::Engine;
-use log::debug;
+use tracing::debug;
 use ronaldos_config::Login;
-use serde::Deserialize;
-use std::time::Duration;
-use std::{fmt::Display, ops::Add};
+use std::ops::Add;
+
 const SESSION_ID_KEY: &str = "Session_id";
 
 #[derive(Debug, PartialEq)]

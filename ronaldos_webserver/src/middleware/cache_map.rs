@@ -3,8 +3,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use log::debug;
-use log::trace;
+use tracing::debug;
+use tracing::trace;
 
 /// This container can hold a fixed size of elements. On the occasion an
 /// insertion exceeds the capacity, the oldest entry in the container will be

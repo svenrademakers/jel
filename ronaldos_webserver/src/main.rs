@@ -13,14 +13,17 @@ use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use anyhow::{ensure, Context};
 use clap::Parser;
-use log::info;
-use logger::init_log;
+use logger::init_logger;
 use middleware::LocalStreamStore;
 use ronaldos_config::{get_application_config, Config};
 use rustls::RootCertStore;
+use services::stream_service::STREAM_SCOPE;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::info;
 
 /// CLI structure that loads the commandline arguments. These arguments will be
 /// serialized in this structure
@@ -35,20 +38,24 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let config = get_application_config(&cli.config);
     let log_level = match config.verbose() {
-        true => log::Level::Debug,
-        false => log::Level::Info,
+        true => tracing::Level::DEBUG,
+        false => tracing::Level::INFO,
     };
-    init_log(log_level);
+    init_logger(log_level);
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move { application_main(web::Data::new(config)).await })
 }
 
 async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
+    let recordings_disk = LocalStreamStore::new(
+        config.video_dir().to_path_buf(),
+        PathBuf::from_str(STREAM_SCOPE)?,
+    );
+    let stream_store = web::Data::new(RwLock::new(recordings_disk));
+    LocalStreamStore::run(&stream_store).await;
+
     let cert_store = Arc::new(native_cert_store());
-    let mut recordings_disk = LocalStreamStore::new(config.video_dir()).await;
-    LocalStreamStore::run(&mut recordings_disk);
-    let stream_store = web::Data::from(recordings_disk);
     let football_api = web::Data::new(
         FootballApi::new("2024", "1857", config.api_key().clone(), cert_store).await,
     );

@@ -1,20 +1,22 @@
-use crate::middleware::LocalStreamStore;
+use crate::middleware::{data_types::Stream, LocalStreamStore};
 use actix_web::{
     get,
     http::{self, header, StatusCode},
     web, HttpResponse, Responder,
 };
-use std::ffi::OsStr;
+use tracing::debug;
+use std::{ffi::OsStr, path::Path};
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
 };
+use tokio::sync::RwLock;
 
-const STREAM_SCOPE: &str = "/streams";
+pub const STREAM_SCOPE: &str = "/streams";
 
 pub fn stream_service_config(
     cfg: &mut web::ServiceConfig,
-    stream_store: web::Data<LocalStreamStore>,
+    stream_store: web::Data<RwLock<LocalStreamStore>>,
 ) {
     cfg.service(
         web::scope(STREAM_SCOPE)
@@ -30,7 +32,7 @@ pub fn stream_service_config(
 }
 
 async fn insert_video_stub(
-    store: web::Data<LocalStreamStore>,
+    store: web::Data<RwLock<LocalStreamStore>>,
     cfg: web::Data<ronaldos_config::Config>,
 ) -> HttpResponse {
     if !cfg.verbose() {
@@ -42,10 +44,13 @@ async fn insert_video_stub(
     let test_description = format!("this is a test#{}", number);
 
     store
+        .write()
+        .await
         .register(
             test_description,
             vec![PathBuf::from(GTEST_VID), PathBuf::from("test1.m3u8")],
             chrono::Utc::now(),
+            None,
         )
         .await
         .unwrap();
@@ -53,8 +58,14 @@ async fn insert_video_stub(
     HttpResponse::Ok().into()
 }
 
-async fn get_all_streams(store: web::Data<LocalStreamStore>) -> impl Responder {
-    web::Json(store.get_available_streams(STREAM_SCOPE).await)
+async fn get_all_streams(store: web::Data<RwLock<LocalStreamStore>>) -> impl Responder {
+    let store = store.read().await;
+    let mut streams = store.get_available_streams().collect::<Vec<&Stream>>();
+    streams.sort_by(|a, b| b.date.cmp(&a.date));
+
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .json(streams)
 }
 
 async fn preflight_response() -> HttpResponse {
@@ -71,9 +82,15 @@ async fn preflight_response() -> HttpResponse {
 }
 
 #[get("{file:.*}")]
-async fn get_segment(file: web::Path<String>, store: web::Data<LocalStreamStore>) -> HttpResponse {
-    let file = file.into_inner();
-    let data = store.get_segment(&file).await.unwrap();
+async fn get_segment(
+    file: web::Path<PathBuf>,
+    store: web::Data<RwLock<LocalStreamStore>>,
+) -> HttpResponse {
+    let mut data = Vec::new();
+    if let Err(e) = store.read().await.get_segment(&file, &mut data) {
+        return HttpResponse::NotFound().body(e.to_string());
+    }
+
     let content_type = match lookup_content_type(&file) {
         Some(content_type) => content_type,
         None => {
@@ -95,8 +112,8 @@ async fn get_segment(file: web::Path<String>, store: web::Data<LocalStreamStore>
         .body(data)
 }
 
-fn lookup_content_type<T: Into<PathBuf>>(path: T) -> Option<&'static str> {
-    match path.into().extension().and_then(OsStr::to_str) {
+fn lookup_content_type(path: &Path) -> Option<&'static str> {
+    match path.extension().and_then(OsStr::to_str) {
         Some("m3u8") => Some("application/x-mpegURL"),
         Some("mp4") => Some("video/mp4"),
         Some("ts") => Some("video/mp2t"),

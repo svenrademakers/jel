@@ -1,9 +1,9 @@
-use log::info;
 use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer},
     ServerConfig,
 };
 use std::{fs, io, path::Path};
+use tracing::info;
 
 pub fn load_server_config(
     certificates: &Path,

@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 pub type MetaFile = StreamMeta<PathBuf>;
 pub type Stream = StreamMeta<Source>;
+pub const STREAM_EXT: &str = "stream";
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct StreamMeta<T>
 where
@@ -17,6 +19,7 @@ where
     #[serde(with = "ts_seconds")]
     pub date: DateTime<Utc>,
     pub live: Option<bool>,
+    pub fixture_id: Option<u64>,
 }
 
 impl From<StreamMeta<PathBuf>> for StreamMeta<Source> {
@@ -41,6 +44,7 @@ impl From<StreamMeta<PathBuf>> for StreamMeta<Source> {
             live: meta.live,
             description: meta.description,
             date: meta.date,
+            fixture_id: meta.fixture_id,
         }
     }
 }

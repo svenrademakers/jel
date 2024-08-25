@@ -1,20 +1,20 @@
 pub mod data_types;
 
 use self::data_types::*;
-use super::cache_map::CacheMap;
 use anyhow::{bail, ensure, Context, Result};
 use chrono::{DateTime, Utc};
-use log::{debug, error, info, trace, warn};
-use notify::{Config, EventKind, PollWatcher, RecursiveMode, Watcher};
+use hashbrown::HashMap;
+use notify::{Config, Event, EventKind, PollWatcher, RecursiveMode, Watcher};
 use std::{
-    collections::BTreeMap,
     ffi::OsStr,
-    hash::Hash,
+    fs::{self, OpenOptions},
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::{mpsc::channel, RwLock};
+use tokio::sync::{mpsc::channel, mpsc::Receiver, RwLock};
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 /// Provides video streams that are persisted on the filesystem. Even given they
@@ -37,47 +37,56 @@ pub struct LocalStreamStore {
     /// Directory which all stream files will be written to. All paths used in
     /// [StreamStoreImpl] are relative compared to the root directory
     root: PathBuf,
+    request_base: PathBuf,
     /// Map that contains the index of found streams. This is the single source
     /// of truth.
-    stream_map: RwLock<BTreeMap<Uuid, Stream>>,
-    uuid_lookup: RwLock<BTreeMap<PathBuf, Uuid>>,
-    /// 3 way cache, caching streams optimized for the 3 different bitrate levels.
-    file_cache: RwLock<CacheMap<Path, Vec<u8>, 128>>,
+    stream_map: HashMap<Uuid, Stream>,
+    uuid_lookup: HashMap<PathBuf, Uuid>,
     /// This watcher object is used to exit the watcher task.
     file_watcher: Option<PollWatcher>,
 }
 
 impl LocalStreamStore {
-    pub async fn new(root: &Path) -> Arc<LocalStreamStore> {
+    pub fn new(root: PathBuf, request_base: PathBuf) -> LocalStreamStore {
         if !root.exists() {
             info!("creating {}, as it does not exist", root.to_string_lossy());
-            tokio::fs::create_dir_all(&root).await.unwrap();
+            std::fs::create_dir_all(&root).unwrap();
         }
 
-        Arc::new(LocalStreamStore {
-            root: root.to_path_buf(),
-            stream_map: RwLock::new(BTreeMap::default()),
-            uuid_lookup: RwLock::new(BTreeMap::default()),
-            file_cache: RwLock::new(CacheMap::new()),
+        LocalStreamStore {
+            root,
+            request_base,
+            stream_map: HashMap::default(),
+            uuid_lookup: HashMap::default(),
             file_watcher: None,
-        })
+        }
     }
 
-    pub fn run(instance: &mut Arc<LocalStreamStore>) {
-        Self::start_filewatcher(instance);
-
+    pub async fn run(instance: &Arc<RwLock<LocalStreamStore>>) {
         // spawn loading task
         let loading_instance = instance.clone();
         tokio::spawn(async move {
-            loading_instance
-                .load(&[loading_instance.root.to_path_buf(); 1])
-                .await
-                .unwrap();
+            let mut unlocked = loading_instance.write().await;
+            let root_path = unlocked.root.clone();
+            unlocked.load(&[root_path; 1]).unwrap();
+        });
+
+        // spawn file watcher task
+        let mut receiver = instance.write().await.start_filewatcher();
+        let watch_instance = instance.clone();
+        tokio::spawn(async move {
+            while let Some(event) = receiver.recv().await {
+                watch_instance
+                    .write()
+                    .await
+                    .handle_debounce_event(event)
+                    .await;
+            }
         });
     }
 
-    fn start_filewatcher(instance: &mut Arc<LocalStreamStore>) {
-        let (sender, mut receiver) = channel(32);
+    fn start_filewatcher(&mut self) -> Receiver<Event> {
+        let (sender, receiver) = channel(32);
         let handle_notify_receiver = move |res| {
             let event = match res {
                 Ok(event) => event,
@@ -96,26 +105,17 @@ impl LocalStreamStore {
         let poll_config = Config::default().with_poll_interval(Duration::from_secs(5));
         let mut watcher = PollWatcher::new(handle_notify_receiver, poll_config).unwrap();
         watcher
-            .watch(&instance.root, RecursiveMode::NonRecursive)
+            .watch(&self.root, RecursiveMode::NonRecursive)
             .unwrap();
 
-        let mut_instance = Arc::get_mut(instance)
-            .expect("LocalStreamStore is not allowed to be shared before run call");
-        mut_instance.file_watcher = Some(watcher);
-
-        // spawn file watcher task
-        let watch_instance = instance.clone();
-        tokio::spawn(async move {
-            while let Some(event) = receiver.recv().await {
-                watch_instance.handle_debounce_event(event).await;
-            }
-        });
+        self.file_watcher = Some(watcher);
+        receiver
     }
 
-    async fn handle_debounce_event(&self, event: notify::event::Event) {
+    async fn handle_debounce_event(&mut self, event: notify::event::Event) {
         let paths = event.paths;
         let result: Result<()> = match event.kind {
-            EventKind::Create(_) | EventKind::Modify(_) => self.load(&paths).await,
+            EventKind::Create(_) | EventKind::Modify(_) => self.load(&paths),
             EventKind::Remove(_) => self
                 .removed(&paths)
                 .await
@@ -131,23 +131,24 @@ impl LocalStreamStore {
 
     /// Load a .stream meta file from disk. path can be a directory or a file.
     /// note that recursive scanning is disabled. see [LocalStreamStore::scan]
-    async fn load(&self, paths: &[PathBuf]) -> Result<()> {
+    fn load(&mut self, paths: &[PathBuf]) -> Result<()> {
         let mut lookup = Vec::new();
         let mut new_meta_files = Vec::new();
         for path in paths {
-            new_meta_files.extend(self.scan(path).await?.map(|(p, meta)| {
+            new_meta_files.extend(self.scan(path)?.map(|(p, meta)| {
                 lookup.push((p, meta.uuid));
                 (meta.uuid, meta.into())
             }));
         }
-        self.uuid_lookup.write().await.extend(lookup);
-        self.stream_map.write().await.extend(new_meta_files);
+
+        self.uuid_lookup.extend(lookup);
+        self.stream_map.extend(new_meta_files);
         Ok(())
     }
 
     /// Scans for .stream files in a given path none recursively. If path is not a
     /// sub directory of root, None is returned.
-    async fn scan(&self, path: &Path) -> Result<impl Iterator<Item = (PathBuf, MetaFile)>> {
+    fn scan(&self, path: &Path) -> Result<impl Iterator<Item = (PathBuf, MetaFile)>> {
         ensure!(
             path.starts_with(&self.root),
             format!(
@@ -158,22 +159,21 @@ impl LocalStreamStore {
         );
 
         trace!("scanning: {:?}", &path);
-        let mut found = Vec::new();
-        let mut push_found = |path: &Path| match self.parse_file(path) {
-            Ok(tuple) => found.push(tuple),
-            Err(e) => debug!("{}", e),
+        let mut found = Vec::with_capacity(512);
+        let mut push_found = |path: &Path| {
+            self.parse_file(path)
+                .map_or_else(|e| warn!("{:#}", e), |tuple| found.push(tuple))
         };
 
-        let md = tokio::fs::metadata(path)
-            .await
+        let meta_data = fs::metadata(path)
             .with_context(|| format!("failed to get metadata for {}", path.to_string_lossy()))?;
-        if md.is_file() {
+
+        if meta_data.is_file() {
             push_found(path);
         } else {
-            let mut dir_entry = tokio::fs::read_dir(path)
-                .await
+            let mut dir_entry = fs::read_dir(path)
                 .with_context(|| format!("failed to read dir {}", path.to_string_lossy()))?;
-            while let Ok(Some(entry)) = dir_entry.next_entry().await {
+            while let Some(Ok(entry)) = dir_entry.next() {
                 push_found(&entry.path());
             }
         }
@@ -204,25 +204,34 @@ impl LocalStreamStore {
         let file = std::fs::File::open(path)
             .with_context(|| format!("error opening {}", path.to_string_lossy()))?;
 
-        let stream = serde_yaml::from_reader::<std::fs::File, MetaFile>(file)
+        let mut stream = serde_yaml::from_reader::<std::fs::File, MetaFile>(file)
             .with_context(|| format!("could not parse {}", path.to_string_lossy()))?;
+        self.patch_sources(&mut stream);
+
         Ok((path.to_path_buf(), stream))
     }
 
-    pub async fn removed(&self, paths: &[PathBuf]) -> bool {
+    /// This function converts the actual paths on disk to request urls. This prevents us from
+    /// having to convert sources during a given request.
+    fn patch_sources(&self, stream: &mut MetaFile) {
+        for source in stream.sources.iter_mut().filter(|s| !s.starts_with("http")) {
+            let full = self.request_base.join(&source);
+            *source = full;
+        }
+    }
+
+    pub async fn removed(&mut self, paths: &[PathBuf]) -> bool {
         let mut removed_count = 0;
         let files = paths
             .iter()
-            .filter(|f| f.extension() == Some(OsStr::new("stream")));
+            .filter(|f| f.extension() == Some(OsStr::new(STREAM_EXT)));
 
-        let lookup = self.uuid_lookup.read().await;
         for file in files {
-            let uuid = match lookup.get(file) {
-                Some(val) => val,
-                None => continue,
+            let Some(uuid) = self.uuid_lookup.remove(file) else {
+                continue;
             };
 
-            if self.stream_map.write().await.remove(uuid).is_some() {
+            if self.stream_map.remove(&uuid).is_some() {
                 debug!("removed {} {} from cache", file.to_string_lossy(), uuid);
                 removed_count += 1;
             }
@@ -234,26 +243,20 @@ impl LocalStreamStore {
     /// most recent date first. Note that even though they are available, the
     /// actual sources might be offline for what reason.
     ///
-    /// # Arguments
-    ///
-    /// * `prefix` prefixes all urls contained in the [Stream] Vector with the
-    ///   given argument
-    ///
     /// # Return
     ///
     /// vector of registered streams
-    pub async fn get_available_streams(&self, prefix: &str) -> Vec<Stream> {
-        let mut map: Vec<Stream> = self
-            .stream_map
-            .read()
-            .await
-            .values()
-            .cloned()
-            .map(|s| prepend_prefix(s, prefix))
-            .collect();
+    pub fn get_available_streams(&self) -> impl Iterator<Item = &Stream> {
+        self.stream_map.values()
+    }
 
-        map.sort_by(|a, b| b.date.cmp(&a.date));
-        map
+    #[instrument(skip(self, writer))]
+    pub fn get_segment(&self, file: &Path, mut writer: impl Write) -> io::Result<()> {
+        let path = self.root.join(file);
+        debug!("reading segment {}", path.to_string_lossy());
+        let mut f = fs::OpenOptions::new().read(true).open(&path)?;
+        std::io::copy(&mut f, &mut writer)?;
+        Ok(())
     }
 
     /// registers a new fixture
@@ -262,6 +265,7 @@ impl LocalStreamStore {
         description: String,
         sources: Vec<PathBuf>,
         date: DateTime<Utc>,
+        fixture_id: Option<u64>,
     ) -> Result<Uuid, RegisterError> {
         if sources.is_empty() {
             return Err(RegisterError::SourceArgumentEmpty);
@@ -273,48 +277,21 @@ impl LocalStreamStore {
             description,
             date,
             live: Some(true),
+            fixture_id,
         };
 
-        let as_str = serde_yaml::to_string(&registration).map_err(RegisterError::ParseError)?;
-        let name = format!("{}.stream", registration.uuid);
-
+        let name = format!("{}.{}", registration.uuid, STREAM_EXT);
         let file_name = self.root.join(name);
-        tokio::fs::write(&file_name, as_str.as_bytes())
-            .await
-            .map_err(RegisterError::IoError)?;
 
-        info!("created {}", file_name.to_string_lossy(),);
+        let file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&file_name)?;
+        serde_yaml::to_writer(file, &registration)?;
+
+        info!("created {}", file_name.to_string_lossy());
         Ok(registration.uuid)
     }
-
-    pub async fn get_segment<P>(&self, file: P) -> Result<Vec<u8>>
-    where
-        P: Hash + AsRef<Path>,
-    {
-        let mut cache = self.file_cache.write().await;
-        let path = self.root.join(file.as_ref());
-        if let Some(buffer) = cache.get(&path) {
-            return Ok(buffer.clone());
-        }
-
-        Ok(cache
-            .insert(file.as_ref(), tokio::fs::read(path).await?)
-            .clone())
-    }
-}
-
-/// Adds a given url as prefix to the current base url. This base url is
-fn prepend_prefix(mut stream: Stream, prefix: &str) -> Stream {
-    for source in stream
-        .sources
-        .iter_mut()
-        .filter(|s| !s.url.starts_with("http:") && !s.url.starts_with("https:"))
-    {
-        let full = PathBuf::from(prefix).join(source.url.clone());
-        source.url = full;
-    }
-
-    stream
 }
 
 #[cfg(test)]
@@ -332,13 +309,13 @@ mod tests {
     async fn test_scan() {
         let temp = TempDir::new("test").unwrap();
         let stream_store = LocalStreamStore::new(temp.path()).await;
-        assert_eq!(0, stream_store.scan(temp.path()).await.unwrap().count());
+        assert_eq!(0, stream_store.scan(temp.path()).unwrap().count());
 
         tokio::fs::File::create(temp.path().join("asdfa.bla"))
             .await
             .unwrap();
 
-        assert_eq!(0, stream_store.scan(temp.path()).await.unwrap().count());
+        assert_eq!(0, stream_store.scan(temp.path()).unwrap().count());
         assert_eq!(0, stream_store.stream_map.read().await.len());
 
         let _ = stream_store
@@ -350,7 +327,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(1, stream_store.scan(temp.path()).await.unwrap().count());
+        assert_eq!(1, stream_store.scan(temp.path()).unwrap().count());
 
         tokio::fs::File::create(temp.path().join("test1.dash"))
             .await
@@ -360,7 +337,6 @@ mod tests {
             0,
             stream_store
                 .scan(&temp.path().join("test1.dash"))
-                .await
                 .unwrap()
                 .count()
         );
@@ -388,7 +364,7 @@ mod tests {
             .await
             .unwrap();
 
-        LocalStreamStore::load(&stream_store.clone(), temp.path().to_path_buf().into())
+        LocalStreamStore::load(&stream_store.clone(), temp.path().to_path_buf())
             .await
             .unwrap();
         assert_stream(
