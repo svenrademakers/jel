@@ -1,5 +1,4 @@
 pub mod data_types;
-
 use self::data_types::*;
 use anyhow::{bail, ensure, Context, Result};
 use chrono::{DateTime, Utc};
@@ -286,6 +285,7 @@ impl LocalStreamStore {
         let file = OpenOptions::new()
             .write(true)
             .truncate(true)
+            .create(true)
             .open(&file_name)?;
         serde_yaml::to_writer(file, &registration)?;
 
@@ -297,6 +297,7 @@ impl LocalStreamStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use tempdir::TempDir;
 
     fn assert_stream(mut a: Stream, mut b: Stream) {
@@ -308,7 +309,8 @@ mod tests {
     #[tokio::test]
     async fn test_scan() {
         let temp = TempDir::new("test").unwrap();
-        let stream_store = LocalStreamStore::new(temp.path()).await;
+        let stream_store =
+            LocalStreamStore::new(temp.path().into(), PathBuf::from_str("/test").unwrap());
         assert_eq!(0, stream_store.scan(temp.path()).unwrap().count());
 
         tokio::fs::File::create(temp.path().join("asdfa.bla"))
@@ -316,13 +318,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(0, stream_store.scan(temp.path()).unwrap().count());
-        assert_eq!(0, stream_store.stream_map.read().await.len());
+        assert_eq!(0, stream_store.stream_map.len());
 
         let _ = stream_store
             .register(
                 "asdfas".to_string(),
                 vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
                 Utc::now(),
+                None,
             )
             .await
             .unwrap();
@@ -345,28 +348,25 @@ mod tests {
     #[tokio::test]
     async fn test_load_and_remove() {
         let temp = TempDir::new("test").unwrap();
-        let stream_store = LocalStreamStore::new(temp.path()).await;
+        let mut stream_store = LocalStreamStore::new(
+            temp.path().to_owned(),
+            PathBuf::from_str("/endpoint").unwrap(),
+        );
 
         let registered = stream_store
             .register(
                 "test1".to_string(),
                 vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
                 Utc::now(),
+                None,
             )
             .await
             .unwrap();
 
-        tokio::fs::File::create(temp.path().join("test1.dash"))
-            .await
-            .unwrap();
+        fs::File::create(temp.path().join("test1.dash")).unwrap();
+        fs::File::create(temp.path().join("blaat.dash")).unwrap();
 
-        tokio::fs::File::create(temp.path().join("blaat.dash"))
-            .await
-            .unwrap();
-
-        LocalStreamStore::load(&stream_store.clone(), temp.path().to_path_buf())
-            .await
-            .unwrap();
+        stream_store.load(&[temp.path().to_path_buf()]).unwrap();
         assert_stream(
             Stream {
                 uuid: registered,
@@ -374,17 +374,18 @@ mod tests {
                 date: Utc::now(),
                 sources: vec![
                     Source {
-                        url: "test1.dash".into(),
+                        url: "/endpoint/test1.dash".into(),
                         typ: "application/dash+xml".to_string(),
                     },
                     Source {
-                        url: "test1.m3u8".into(),
+                        url: "/endpoint/test1.m3u8".into(),
                         typ: "application/x-mpegURL".to_string(),
                     },
                 ],
+                fixture_id: None,
                 live: Some(true),
             },
-            stream_store.stream_map.read().await[&registered].clone(),
+            stream_store.stream_map[&registered].clone(),
         );
 
         let uuid2 = stream_store
@@ -392,34 +393,33 @@ mod tests {
                 "12345".to_string(),
                 vec![PathBuf::from("test2.dash"), PathBuf::from("test_3.m3u8")],
                 Utc::now(),
+                None,
             )
             .await
             .unwrap();
 
-        LocalStreamStore::load(
-            &stream_store.clone(),
-            temp.path().join(format!("{}.stream", uuid2.to_string())),
-        )
-        .await
-        .unwrap();
+        stream_store
+            .load(&[temp.path().join(format!("{}.stream", uuid2.to_string()))])
+            .unwrap();
         assert_stream(
             Stream {
                 uuid: uuid2,
                 description: "12345".to_string(),
                 sources: vec![
                     Source {
-                        url: "test2.dash".into(),
+                        url: "/endpoint/test2.dash".into(),
                         typ: "application/dash+xml".to_string(),
                     },
                     Source {
-                        url: "test_3.m3u8".into(),
+                        url: "/endpoint/test_3.m3u8".into(),
                         typ: "application/x-mpegURL".to_string(),
                     },
                 ],
                 date: Utc::now(),
                 live: Some(true),
+                fixture_id: None,
             },
-            stream_store.stream_map.read().await[&uuid2].clone(),
+            stream_store.stream_map[&uuid2].clone(),
         );
 
         assert_stream(
@@ -428,62 +428,60 @@ mod tests {
                 description: "test1".to_string(),
                 sources: vec![
                     Source {
-                        url: "test1.dash".into(),
+                        url: "/endpoint/test1.dash".into(),
                         typ: "application/dash+xml".to_string(),
                     },
                     Source {
-                        url: "test1.m3u8".into(),
+                        url: "/endpoint/test1.m3u8".into(),
                         typ: "application/x-mpegURL".to_string(),
                     },
                 ],
                 date: Utc::now(),
                 live: Some(true),
+                fixture_id: None,
             },
-            stream_store.stream_map.read().await[&registered].clone(),
+            stream_store.stream_map[&registered].clone(),
         );
 
         assert!(
             !stream_store
-                .removed(stream_store.root.join("1234_test1.stream"))
+                .removed(&[stream_store.root.join("1234_test1.stream")])
                 .await
         );
 
         let filename = format!("{}.stream", uuid2);
-        stream_store.removed(stream_store.root.join(filename)).await;
+        stream_store
+            .removed(&[stream_store.root.join(filename)])
+            .await;
 
-        assert!(!stream_store.stream_map.read().await.contains_key(&uuid2));
+        assert!(!stream_store.stream_map.contains_key(&uuid2));
     }
 
     #[tokio::test]
     async fn test_modification_of_stream_file() {
         let temp = TempDir::new("test").unwrap();
-        let stream_store = LocalStreamStore::new(temp.path()).await;
+        let mut stream_store =
+            LocalStreamStore::new(temp.path().into(), PathBuf::from_str("/test").unwrap());
 
         let registered = stream_store
             .register(
                 "test1".to_string(),
                 vec![PathBuf::from("test1.dash"), PathBuf::from("test1.m3u8")],
                 Utc::now(),
+                None,
             )
             .await
             .unwrap();
-        stream_store.load(temp.path().to_path_buf()).await.unwrap();
-        assert!(stream_store
-            .stream_map
-            .read()
-            .await
-            .contains_key(&registered));
+        stream_store.load(&[temp.path().to_path_buf()]).unwrap();
+        assert!(stream_store.stream_map.contains_key(&registered));
 
         let filename = temp.path().join(format!("{}.stream", registered));
         let mut meta = stream_store.parse_file(&filename).unwrap().1;
         meta.description = "kees".to_string();
         let as_str = serde_yaml::to_string(&meta).unwrap();
         std::fs::write(filename, as_str).unwrap();
-        stream_store.load(temp.path().to_path_buf()).await.unwrap();
+        stream_store.load(&[temp.path().to_path_buf()]).unwrap();
 
-        assert_eq!(
-            "kees",
-            &stream_store.stream_map.read().await[&registered].description
-        );
+        assert_eq!("kees", &stream_store.stream_map[&registered].description);
     }
 }

@@ -41,3 +41,6 @@ simd-json = "0.13.10"
 
 [dev-dependencies]
 tempdir = "*"
+
+[build-dependencies]
+cc = "1.1.22"

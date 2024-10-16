@@ -3,6 +3,7 @@ mod middleware;
 mod services;
 mod tls_config;
 
+use crate::middleware::screen_grabber::ScreenGrabber;
 use crate::middleware::{FootballApi, SessionMananger};
 use crate::services::authentication_service::RonaldoAuthentication;
 use crate::services::fixture_service::fixture_service_config;
@@ -48,10 +49,9 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn application_main(config: web::Data<Config>) -> anyhow::Result<()> {
-    let recordings_disk = LocalStreamStore::new(
-        config.video_dir().to_path_buf(),
-        PathBuf::from_str(STREAM_SCOPE)?,
-    );
+    let video_dir = config.video_dir().to_path_buf();
+    let screen = ScreenGrabber::new("Game Capture HD60 S+".to_string(), video_dir.clone())?;
+    let recordings_disk = LocalStreamStore::new(video_dir, PathBuf::from_str(STREAM_SCOPE)?);
     let stream_store = web::Data::new(RwLock::new(recordings_disk));
     LocalStreamStore::run(&stream_store).await;
 
