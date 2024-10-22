@@ -1,0 +1,68 @@
+name: packages
+on: push
+
+env:
+  package_name: "ronaldos-screen-grabber"
+  version: "1.0.0"
+  description: "core video grab system"
+  maintainer: "Sven Rademakers <sven.rademakers@gmail.com>"
+  srcdir: screen_grabber
+  pkgdir: ./stage
+
+jobs:
+  AUR:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: archives target files
+        run: |
+          mkdir -p ${pkgdir}
+          source screen_grabber/install
+          tar -czf ${package_name}-${version}.tar.gz -C ${pkgdir} .
+          cp screen_grabber/systemd.install .
+          cp screen_grabber/PKGBUILD .
+      - name: generate PKGBUILD
+        run: |
+          sed -i "1i # Maintainer: ${maintainer}" PKGBUILD
+          sed -i "s/^pkgname=.*/pkgname=${package_name}/" PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=${version}/" PKGBUILD
+          sed -i "s/^pkgdesc=.*/pkgdesc='${description}'/" PKGBUILD
+      - name: Create AUR package
+        uses: addnab/docker-run-action@v3
+        with:
+          registry: ghcr.io
+          image: 'ghcr.io/heyhusen/archlinux-package-action:latest'
+          options: -v ${{ github.workspace }}:/workspace --entrypoint=""
+          run: /workspace/scripts/ci/arch_entry_point.sh
+      - name: Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: AUR
+          path: "*.zst"
+
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: create debian package
+        run: |
+          mkdir -p ${pkgdir}
+          mkdir -p ${pkgdir}/DEBIAN
+          sed -i "s/^Package:.*/Package: ${package_name}/" screen_grabber/control
+          sed -i "s/^Version:.*/Version: ${version}/" screen_grabber/control
+          sed -i "s/^Description:.*/Description: '${description}'/" screen_grabber/control
+          sed -i "s/^Maintainer:.*/Maintainer: '${maintainer}'/" screen_grabber/control
+          cp screen_grabber/control ${pkgdir}/DEBIAN
+          cp screen_grabber/postinst ${pkgdir}/DEBIAN
+          source screen_grabber/install
+          dpkg-deb --build ${pkgdir} "${package_name}-${version}.deb"
+      - name: Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian
+          path: "*.deb"
+
+
+

@@ -1,3 +1,0 @@
-#!/bin/bash
-DISPLAY=:83 chromium --start-fullscreen --app=$1 2> /dev/null
-

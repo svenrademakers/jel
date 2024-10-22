@@ -1,0 +1,17 @@
+#!/bin/bash
+output="rtmp://localhost:1935/show/${1}"
+display=:83
+preset="veryfast"
+profile="high"
+bitrate="10M"
+framerate="30"
+
+set -x
+ffmpeg \
+-f x11grab -s hd1080 -i ${display} \
+-f pulse -i default \
+-vcodec libx264 -pix_fmt yuv420p -preset ${preset} -profile:v ${profile} -b:v ${bitrate} \
+-acodec aac -b:a 128k \
+-t 02:20:00 \
+-framerate ${framerate} \
+-f flv ${output}

@@ -1,0 +1,8 @@
+SYSTEMD_ROOT=${pkgdir}/etc/systemd/system
+BIN=${pkgdir}/usr/bin
+install -Dm 755 ${srcdir}/roki_open $BIN/roki_open
+install -Dm 755 ${srcdir}/roki_broadcast $BIN/roki_broadcast
+install -Dm 644 ${srcdir}/rtmp_server.service $SYSTEMD_ROOT/rtmp_server.service
+install -Dm 644 ${srcdir}/vnc_server.service $SYSTEMD_ROOT/vnc_server.service
+install -Dm 644 ${srcdir}/xvfb.service $SYSTEMD_ROOT/xvfb.service
+install -Dm 644 ${srcdir}/ronaldo.target $SYSTEMD_ROOT/ronaldo.target

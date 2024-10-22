@@ -1,0 +1,13 @@
+[Unit]
+Description=Ronaldo's xiu server
+Requires=xvfb.service
+After=xvfb.service network-online.target remote-fs.target nss-lookup.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/xiu -r 1935
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+

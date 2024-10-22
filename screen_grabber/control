@@ -1,0 +1,9 @@
+Package:
+Version:
+Section: base
+Priority: optional
+Architecture: all
+Maintainer:
+Description:
+Depends: xvfb, x11vnc, chromium-browser
+

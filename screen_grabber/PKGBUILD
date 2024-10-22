@@ -1,0 +1,15 @@
+pkgname=
+pkgver=
+pkgrel=1
+pkgdesc=
+arch=('any')
+license=('GPL')
+depends=('chromium' 'xorg-server-xvfb' 'x11vnc')
+optdepends=('xiu: Optional tool for additional functionality')
+source=("${pkgname}-${pkgver}.tar.gz")
+
+package() {
+    cp -r --preserve=mode "$srcdir/." "$pkgdir/"
+    rm -f ${pkgdir}/${pkgname}-${pkgver}.tar.gz
+}
+
