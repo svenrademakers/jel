@@ -1745,6 +1745,7 @@ dependencies = [
  "futures-util",
  "hashbrown",
  "notify",
+ "paste",
  "ronaldos_config",
  "rustls",
  "rustls-native-certs",

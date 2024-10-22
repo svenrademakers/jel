@@ -1,5 +1,4 @@
 use anyhow::bail;
-use core::ffi;
 use std::{
     ffi::{CStr, CString},
     fs,
@@ -59,18 +58,6 @@ impl Drop for ScreenGrabber {
             screen_grabber_stop_all();
         }
     }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn log_info(msg: *const ffi::c_char) {
-    let c_str = CStr::from_ptr(msg);
-    tracing::info!("{}", c_str.to_string_lossy());
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn log_error(msg: *const ffi::c_char) {
-    let c_str = CStr::from_ptr(msg);
-    tracing::error!("{}", c_str.to_string_lossy());
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ mod logger;
 mod middleware;
 mod services;
 mod tls_config;
+pub mod ffi_log;
 
 use crate::middleware::screen_grabber::ScreenGrabber;
 use crate::middleware::{FootballApi, SessionMananger};
