@@ -1,0 +1,10 @@
+#!/bin/bash
+output="rtmp://localhost/show/${1}"
+display=:83
+dimensions=$(DISPLAY=${display} xdpyinfo | grep dimensions | awk '{print $2}')
+preset="veryfast"
+bitrate="3000k"
+
+ffmpeg -f x11grab -s -i ${display} -vcodec libx264 -pix_fmt yuv420p -preset ${preset} -b:v ${bitrate} \
+-f pulse -i default -acodec aac -b:a 128k \
+-t 02:20:00 -f flv ${output}

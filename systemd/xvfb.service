@@ -1,0 +1,12 @@
+[Unit]
+Description=Ronaldo's virtual framebuffer service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/Xvfb :83 -screen 0 1920x1080x24
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+

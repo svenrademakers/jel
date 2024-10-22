@@ -1,0 +1,13 @@
+[Unit]
+Description=Ronaldo's VNC server
+Requires=xvfb.service
+After=xvfb.service network.target remote-fs.target nss-lookup.target
+Wants=network.target
+
+[Service]
+ExecStart=x11vnc -display :83 -forever -loop
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
